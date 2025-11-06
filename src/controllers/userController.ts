@@ -4,6 +4,14 @@
 import { type Response } from 'express';
 import * as admin from 'firebase-admin';
 import { AuthenticatedRequest } from '../middlewares/authMiddleware';
+import { createClient } from '@supabase/supabase-js';
+
+// --- INICIALIZAÇÃO DO CLIENTE SUPABASE (somente com chaves de ambiente) ---
+// Usaremos as variáveis de ambiente que configuramos no Render.
+const supabaseAdmin = createClient(
+    process.env.VITE_SUPABASE_URL!,
+    process.env.VITE_SUPABASE_SERVICE_KEY!
+);
 
 // --- 1. PAYLOAD ALINHADO COM SUA TIPAGEM ---
 // Este é o formato de dados que o frontend deve enviar.
@@ -226,5 +234,74 @@ export const clearPasswordClaim = async (req: AuthenticatedRequest, res: Respons
     } catch (error) {
         console.error(`Erro ao remover claim para o usuário ${uid}:`, error);
         return res.status(500).send({ error: 'Erro interno ao remover claim.' });
+    }
+};
+
+/**
+ * Baixa um arquivo de contrato privado do Supabase e o serve para o cliente.
+ * Acesso é verificado pelo middleware de autenticação.
+ */
+export const getContractFile = async (req: AuthenticatedRequest, res: Response) => {
+    try {
+        const { studentId } = req.params;
+        const requestingUser = req.user;
+
+        if (!requestingUser) {
+            return res.status(403).send({ error: 'Usuário não autenticado.' });
+        }
+
+        // --- Lógica de Autorização ---
+        const studentRef = admin.firestore().collection('students').doc(studentId);
+        const studentDoc = await studentRef.get();
+
+        if (!studentDoc.exists) {
+            return res.status(404).send({ error: 'Aluno não encontrado.' });
+        }
+
+        const studentData = studentDoc.data()!;
+        const userProfileRef = admin.firestore().collection('userProfiles').doc(requestingUser.uid);
+        const userProfileDoc = await userProfileRef.get();
+        const userRole = userProfileDoc.data()?.role;
+
+        // Permite o acesso se:
+        // 1. O usuário for admin/root.
+        // 2. O UID do usuário que fez a requisição for o mesmo do pai/responsável do aluno.
+        const isAuthorized =
+            ['root', 'admin', 'editor'].includes(userRole) ||
+            requestingUser.uid === studentData.parentOneId ||
+            requestingUser.uid === studentData.parentTwoId ||
+            requestingUser.uid === studentData.financialResponsibleId;
+
+        if (!isAuthorized) {
+            return res.status(403).send({ error: 'Você não tem permissão para visualizar este contrato.' });
+        }
+
+        if (!studentData.contractPath) {
+            return res.status(404).send({ error: 'Este aluno não possui um contrato salvo.' });
+        }
+
+        // --- Download do Arquivo do Supabase ---
+        const { data: fileData, error: downloadError } = await supabaseAdmin.storage
+            .from('contracts')
+            .download(studentData.contractPath);
+
+        if (downloadError) {
+            throw downloadError;
+        }
+
+        // --- Servir o Arquivo para o Frontend ---
+        // Converte o Blob para um Buffer
+        const buffer = Buffer.from(await fileData.arrayBuffer());
+
+        // Define os cabeçalhos da resposta para indicar que é um PDF
+        res.setHeader('Content-Type', 'application/pdf');
+        res.setHeader('Content-Disposition', `inline; filename="contrato.pdf"`); // 'inline' sugere ao navegador para abrir, não baixar
+
+        // Envia o buffer do arquivo como resposta
+        res.send(buffer);
+
+    } catch (error: any) {
+        console.error(`Erro ao buscar contrato para o aluno ${req.params.studentId}:`, error);
+        res.status(500).send({ error: 'Não foi possível carregar o contrato.' });
     }
 };
