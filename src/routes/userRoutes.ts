@@ -1,7 +1,7 @@
 // Em: backend/src/routes/userRoutes.ts
 
 import { Router } from 'express';
-import { clearPasswordClaim, createUser, deleteUser, updateUser } from '../controllers/userController';
+import { clearPasswordClaim, createUser, deleteUser, getContractFile, updateUser } from '../controllers/userController';
 import { requireAuth, requireRole } from '../middlewares/authMiddleware'
 
 const router = Router();
@@ -21,6 +21,10 @@ router.delete('/users/:userId', requireAuth, requireRole(adminRoles), deleteUser
 // Rota para o próprio usuário limpar seu claim de mudança de senha
 // Note que não precisa de 'requireRole', pois o próprio usuário logado pode fazer isso.
 router.post('/users/clear-password-claim', requireAuth, clearPasswordClaim);
+
+// Rota para visualizar um contrato.
+// Apenas requer autenticação. A autorização (se é o pai certo) é feita no controlador.
+router.get('/contracts/view/:studentId', requireAuth, getContractFile);
 
 
 export default router;
