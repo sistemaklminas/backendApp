@@ -1,7 +1,7 @@
 // Em: backend/src/routes/userRoutes.ts
 
 import { Router } from 'express';
-import { clearPasswordClaim, createUser, deleteUser, getContractFile, updateUser } from '../controllers/userController';
+import { clearPasswordClaim, createUser, deleteUser, emulateUser, getContractFile, stopEmulation, updateUser } from '../controllers/userController';
 import { requireAuth, requireRole } from '../middlewares/authMiddleware'
 
 const router = Router();
@@ -25,6 +25,11 @@ router.post('/users/clear-password-claim', requireAuth, clearPasswordClaim);
 // Rota para visualizar um contrato.
 // Apenas requer autenticação. A autorização (se é o pai certo) é feita no controlador.
 router.get('/contracts/view/:studentId', requireAuth, getContractFile);
+
+// --- ROTAS DE EMULAÇÃO ---
+// Protegidas pelo mesmo middleware, a lógica de permissão (ser root) fica no controller.
+router.post('/users/emulate', requireAuth, emulateUser);
+router.post('/users/stop-emulation', requireAuth, stopEmulation);
 
 
 export default router;
