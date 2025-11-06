@@ -220,20 +220,48 @@ export const deleteUser = async (req: AuthenticatedRequest, res: Response) => {
     }
 };
 
+// export const clearPasswordClaim = async (req: AuthenticatedRequest, res: Response) => {
+//     const uid = req.user?.uid;
+//     if (!uid) {
+//         return res.status(403).send({ error: 'Usuário não autenticado.' });
+//     }
+
+//     try {
+//         // Remove todos os custom claims, o que reverte o usuário ao estado normal
+//         await admin.auth().setCustomUserClaims(uid, null);
+//         console.log(`Claim de mudança de senha removido para o usuário ${uid}.`);
+//         return res.status(200).send({ message: 'Claim removido com sucesso.' });
+//     } catch (error) {
+//         console.error(`Erro ao remover claim para o usuário ${uid}:`, error);
+//         return res.status(500).send({ error: 'Erro interno ao remover claim.' });
+//     }
+// };
+
 export const clearPasswordClaim = async (req: AuthenticatedRequest, res: Response) => {
-    const uid = req.user?.uid;
-    if (!uid) {
-        return res.status(403).send({ error: 'Usuário não autenticado.' });
-    }
+    const userId = req.user!.uid;
 
     try {
-        // Remove todos os custom claims, o que reverte o usuário ao estado normal
-        await admin.auth().setCustomUserClaims(uid, null);
-        console.log(`Claim de mudança de senha removido para o usuário ${uid}.`);
-        return res.status(200).send({ message: 'Claim removido com sucesso.' });
-    } catch (error) {
-        console.error(`Erro ao remover claim para o usuário ${uid}:`, error);
-        return res.status(500).send({ error: 'Erro interno ao remover claim.' });
+        // 1. Pega os claims atuais do usuário
+        const { customClaims } = await admin.auth().getUser(userId);
+
+        // Se não houver claims ou o claim específico não existir, não faz nada.
+        if (!customClaims || !customClaims.mustChangePassword) {
+            return res.status(200).send({ message: 'Nenhum claim para limpar.' });
+        }
+
+        // 2. Cria um novo objeto de claims, omitindo APENAS o 'mustChangePassword'
+        // Esta é a "desestruturação com resto" que remove a propriedade.
+        const { mustChangePassword, ...remainingClaims } = customClaims;
+
+        // 3. Salva de volta APENAS os claims restantes (como o 'role')
+        await admin.auth().setCustomUserClaims(userId, remainingClaims);
+
+        console.log(`Claim 'mustChangePassword' [${mustChangePassword}] removido para o usuário ${userId}. Claims restantes:`, remainingClaims);
+        res.status(200).send({ message: 'Claim de senha removido com sucesso.' });
+
+    } catch (error: any) {
+        console.error(`Erro ao limpar claim de senha para ${userId}:`, error);
+        res.status(500).send({ error: 'Falha ao remover o claim de senha.' });
     }
 };
 
@@ -367,3 +395,32 @@ export const stopEmulation = async (req: AuthenticatedRequest, res: Response) =>
         res.status(500).send({ error: 'Falha ao remover o claim de emulação.' });
     }
 };
+
+/**
+ * Limpa o claim 'mustChangePassword' do token do próprio usuário que está fazendo a requisição.
+ * Isso é chamado pelo frontend DEPOIS que o usuário troca a senha com sucesso.
+ */
+// export const clearPasswordClaim = async (req: AuthenticatedRequest, res: Response) => {
+//     // O middleware 'requireAuth' já garante que temos um usuário autenticado.
+//     const userId = req.user!.uid;
+
+//     try {
+//         const { customClaims } = await admin.auth().getUser(userId);
+
+//         // Se o claim não existir, não há nada a fazer.
+//         if (!customClaims || !customClaims.mustChangePassword) {
+//             return res.status(200).send({ message: 'Nenhum claim para limpar.' });
+//         }
+
+//         // Cria um novo objeto de claims sem a propriedade 'mustChangePassword'
+//         const { mustChangePassword, ...newClaims } = customClaims;
+
+//         await admin.auth().setCustomUserClaims(userId, newClaims);
+
+//         console.log(`Claim 'mustChangePassword' [${mustChangePassword}] removido para o usuário ${userId}`);
+//         res.status(200).send({ message: 'Claim de senha removido com sucesso.' });
+//     } catch (error: any) {
+//         console.error(`Erro ao limpar claim de senha para ${userId}:`, error);
+//         res.status(500).send({ error: 'Falha ao remover o claim de senha.' });
+//     }
+// };
