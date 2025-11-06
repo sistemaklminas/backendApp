@@ -23,7 +23,26 @@ import userRoutes from './routes/userRoutes';
 const app = express();
 
 // Middlewares essenciais
-app.use(cors({ origin: true })); // Permite requisições do seu frontend
+// app.use(cors({ origin: true })); // Permite requisições do seu frontend
+// --- CONFIGURAÇÃO DE CORS DINÂMICA ---
+const allowedOrigins = [
+    'http://localhost:5173', // Sua URL de desenvolvimento do frontend
+    'https://app.klminasesportes.com.br' // <<< COLOQUE A URL DO SEU FRONTEND DEPOIS
+];
+
+const corsOptions: cors.CorsOptions = {
+    origin: (origin, callback) => {
+        // Permite requisições sem 'origin' (como Postman, apps mobile)
+        if (!origin) return callback(null, true);
+        if (allowedOrigins.indexOf(origin) === -1) {
+            const msg = 'A política de CORS para este site não permite acesso da origem especificada.';
+            return callback(new Error(msg), false);
+        }
+        return callback(null, true);
+    }
+};
+app.use(cors(corsOptions));
+// --- FIM DA CONFIGURAÇÃO DE CORS ---
 app.use(express.json()); // Permite que o servidor entenda JSON no corpo das requisições
 
 // --- 3. ROTA DE TESTE (HEALTH CHECK) ---
