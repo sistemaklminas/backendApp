@@ -305,3 +305,65 @@ export const getContractFile = async (req: AuthenticatedRequest, res: Response) 
         res.status(500).send({ error: 'Não foi possível carregar o contrato.' });
     }
 };
+
+/**
+ * Adiciona um custom claim ao token do usuário ROOT para emular outro usuário.
+ * Apenas um root pode chamar isso. O ID do usuário a ser emulado vem no body.
+ */
+export const emulateUser = async (req: AuthenticatedRequest, res: Response) => {
+    // O middleware já garante que quem chama é um usuário autenticado.
+    // Agora, verificamos se ele é ROOT.
+    if (req.user?.role !== 'root') {
+        return res.status(403).send({ error: 'Apenas administradores root podem emular usuários.' });
+    }
+
+    const { userIdToEmulate } = req.body;
+    if (!userIdToEmulate) {
+        return res.status(400).send({ error: 'O ID do usuário a ser emulado é obrigatório.' });
+    }
+
+    const rootUserId = req.user.uid; // O ID do próprio root
+
+    try {
+        // Pega os claims atuais do root para não sobrescrevê-los
+        const { customClaims } = await admin.auth().getUser(rootUserId);
+
+        // Adiciona o novo claim de emulação
+        await admin.auth().setCustomUserClaims(rootUserId, {
+            ...customClaims,
+            emulated_uid: userIdToEmulate,
+        });
+
+        console.log(`Root ${rootUserId} agora está emulando ${userIdToEmulate}`);
+        res.status(200).send({ message: 'Emulação iniciada com sucesso.' });
+    } catch (error: any) {
+        console.error('Erro ao iniciar emulação:', error);
+        res.status(500).send({ error: 'Falha ao definir o claim de emulação.' });
+    }
+};
+
+/**
+ * Remove o claim de emulação do token do usuário ROOT.
+ */
+export const stopEmulation = async (req: AuthenticatedRequest, res: Response) => {
+    if (req.user?.role !== 'root') {
+        return res.status(403).send({ error: 'Ação não permitida.' });
+    }
+
+    const rootUserId = req.user.uid;
+
+    try {
+        const { customClaims } = await admin.auth().getUser(rootUserId);
+
+        // Cria um novo objeto de claims sem a propriedade 'emulated_uid'
+        const { emulated_uid, ...newClaims } = customClaims || {};
+
+        await admin.auth().setCustomUserClaims(rootUserId, newClaims);
+
+        console.log(`Root ${rootUserId} parou a emulação de ${emulated_uid}.`);
+        res.status(200).send({ message: 'Emulação finalizada com sucesso.' });
+    } catch (error: any) {
+        console.error('Erro ao parar emulação:', error);
+        res.status(500).send({ error: 'Falha ao remover o claim de emulação.' });
+    }
+};
