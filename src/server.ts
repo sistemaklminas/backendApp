@@ -4,6 +4,8 @@ import express from 'express';
 import cors from 'cors';
 import * as admin from 'firebase-admin';
 import 'dotenv/config'; // Carrega as variáveis de ambiente do .env
+import * as dotenv from 'dotenv';
+dotenv.config()
 
 // --- 1. INICIALIZAÇÃO DO FIREBASE ADMIN ---
 // Pegue este JSON do seu console do Firebase:

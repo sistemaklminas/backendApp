@@ -6,7 +6,7 @@ import * as admin from 'firebase-admin';
 // Estendemos a interface Request do Express para adicionar a propriedade 'user'
 // Assim, teremos autocomplete e segurança de tipo nos controladores
 export interface AuthenticatedRequest extends Request {
-    user?: admin.auth.DecodedIdToken;
+    user?: admin.auth.DecodedIdToken & { role?: string };
 }
 
 // O middleware principal que verifica o token
@@ -25,11 +25,34 @@ export const requireAuth = async (req: AuthenticatedRequest, res: Response, next
         // 3. Verifica o token usando o Firebase Admin SDK
         const decodedToken = await admin.auth().verifyIdToken(idToken);
 
-        // 4. Anexa os dados do usuário decodificado à requisição
-        // Isso permite que os próximos middlewares e controladores saibam quem fez a requisição
-        req.user = decodedToken;
+        // // 4. Anexa os dados do usuário decodificado à requisição
+        // // Isso permite que os próximos middlewares e controladores saibam quem fez a requisição
+        // req.user = decodedToken;
 
-        // 5. Passa para o próximo passo (seja outro middleware ou o controlador final)
+        // // 5. Passa para o próximo passo (seja outro middleware ou o controlador final)
+        // return next();
+        // --- PASSO DE CORREÇÃO ---
+        // 1. Após verificar o token, pega o UID.
+        const uid = decodedToken.uid;
+
+        // 2. Busca o perfil do usuário no Firestore para obter o 'role'.
+        const userProfileDoc = await admin.firestore().collection('userProfiles').doc(uid).get();
+
+        if (!userProfileDoc.exists) {
+            // Se o usuário existe no Auth mas não no Firestore, é um erro de integridade.
+            return res.status(403).send({ error: 'Perfil de usuário não encontrado.' });
+        }
+
+        const userProfile = userProfileDoc.data();
+
+        // 3. Anexa o token decodificado E o perfil do Firestore ao 'req.user'.
+        // Agora, req.user terá uid, email, E role.
+        req.user = {
+            ...decodedToken,
+            role: userProfile?.role,
+        };
+        // --- FIM DA CORREÇÃO ---
+
         return next();
 
     } catch (error) {
