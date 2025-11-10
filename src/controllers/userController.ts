@@ -44,13 +44,13 @@ export const createUser = async (req: AuthenticatedRequest, res: Response) => {
             if (!counterDoc.exists) {
                 // Se o contador não existe, começa em 1.
                 const nextId = 1;
-                transaction.set(counterRef, { currentId: nextId });
+                transaction.set(counterRef, { lastId: nextId });
                 return nextId;
             } else {
                 // Se existe, incrementa o valor atual.
-                const currentId = counterDoc.data()?.currentId || 0;
-                const nextId = currentId + 1;
-                transaction.update(counterRef, { currentId: nextId });
+                const lastId = counterDoc.data()?.lastId || 0;
+                const nextId = lastId + 1;
+                transaction.update(counterRef, { lastId: nextId });
                 return nextId;
             }
         });
