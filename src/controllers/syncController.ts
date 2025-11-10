@@ -82,8 +82,8 @@ export const syncTeacherWithUserProfile = async (teacherId: string, teacherData:
         const newPublicId = await admin.firestore().runTransaction(async (transaction) => {
             let nextId = 1;
             const counterDoc = await transaction.get(counterRef);
-            nextId = (counterDoc.data()?.currentId || 0) + 1;
-            transaction.set(counterRef, { currentId: newPublicId }, { merge: true });
+            nextId = (counterDoc.data()?.lastId || 0) + 1;
+            transaction.set(counterRef, { lastId: newPublicId }, { merge: true });
             return nextId
         });
 
