@@ -30,7 +30,8 @@ const app = express();
 // --- CONFIGURAÇÃO DE CORS DINÂMICA ---
 const allowedOrigins = [
     'http://localhost:5173', // Sua URL de desenvolvimento do frontend
-    'https://app.klminasesportes.com.br' // <<< COLOQUE A URL DO SEU FRONTEND DEPOIS
+    'https://app.klminasesportes.com.br', // <<< COLOQUE A URL DO SEU FRONTEND DEPOIS
+    'https://klminas-1ecb0.web.app'
 ];
 
 const corsOptions: cors.CorsOptions = {
