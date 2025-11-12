@@ -304,14 +304,14 @@ export const getContractFile = async (req: AuthenticatedRequest, res: Response) 
             return res.status(403).send({ error: 'Você não tem permissão para visualizar este contrato.' });
         }
 
-        if (!studentData.contractPath) {
+        if (!studentData.contractUrl) {
             return res.status(404).send({ error: 'Este aluno não possui um contrato salvo.' });
         }
 
         // --- Download do Arquivo do Supabase ---
         const { data: fileData, error: downloadError } = await supabaseAdmin.storage
             .from('contracts')
-            .download(studentData.contractPath);
+            .download(studentData.contractUrl);
 
         if (downloadError) {
             throw downloadError;
