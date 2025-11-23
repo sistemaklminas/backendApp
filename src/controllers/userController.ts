@@ -19,7 +19,7 @@ interface CreateUserPayload {
     email: string;
     password: string; // Senha agora é obrigatória
     name: string;
-    role: "root" | "admin" | "editor" | "teacher" | "user";
+    role: "root" | "admin" | "editor" | 'coordinator' | "teacher" | "user";
     phone?: string;
     document?: string;
     // 'photoUrl' e 'isActive' serão definidos pelo backend.
