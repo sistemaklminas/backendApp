@@ -81,7 +81,7 @@ export const checkPendingContractsJob = async (req: Request, res: Response) => {
             // Desativa o aluno SOMENTE se o ID dele estiver no Set de alunos com inscrições reais
             if (studentsWithRealSubs.has(doc.id)) {
                 const studentData = doc.data();
-                console.log(`Agendando desativação para o aluno ${doc.id} (${studentData.name}) por contrato vencido e matrícula real.`);
+                console.log(`Agendando desativação para o aluno ${doc.id} (${studentData.name.toLocaleUpperCase()}) por contrato vencido e matrícula real.`);
 
                 batch.update(doc.ref, {
                     isActive: false,
