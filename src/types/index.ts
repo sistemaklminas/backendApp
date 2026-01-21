@@ -72,6 +72,8 @@ export interface Contract {
 // --- TIPO DE DADOS PARA O TEMPLATE DO CONTRATO ---
 
 export interface ContractSessionData {
+    year: number,
+    status: 'pending' | 'sent_to_signature' | 'signed';
     financialResponsible: FinancialResponsible;
     subscriptionItems: Array<{
         studentName: string;
