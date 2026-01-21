@@ -1,16 +1,10 @@
 // Em: backend/src/middlewares/authMiddleware.ts
 
-import { type Request, type Response, type NextFunction } from 'express';
+import { Request, Response, NextFunction } from 'express';
 import * as admin from 'firebase-admin';
 
-// Estendemos a interface Request do Express para adicionar a propriedade 'user'
-// Assim, teremos autocomplete e segurança de tipo nos controladores
-export interface AuthenticatedRequest extends Request {
-    user?: admin.auth.DecodedIdToken & { role?: string };
-}
-
 // O middleware principal que verifica o token
-export const requireAuth = async (req: AuthenticatedRequest, res: Response, next: NextFunction) => {
+export const requireAuth = async (req: Request, res: Response, next: NextFunction) => {
     const { authorization } = req.headers;
 
     // 1. Verifica se o cabeçalho de autorização existe e está no formato correto
@@ -64,7 +58,7 @@ export const requireAuth = async (req: AuthenticatedRequest, res: Response, next
 // Um segundo middleware, mais específico, para verificar a 'role' (função) do usuário
 // Ele deve ser usado DEPOIS do 'requireAuth'
 export const requireRole = (roles: string[]) => {
-    return async (req: AuthenticatedRequest, res: Response, next: NextFunction) => {
+    return async (req: Request, res: Response, next: NextFunction) => {
         const { user } = req; // Pega o usuário que foi decodificado pelo middleware anterior
 
         if (!user || !user.uid) {

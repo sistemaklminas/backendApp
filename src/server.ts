@@ -21,6 +21,7 @@ admin.initializeApp({
 // Importe as novas rotas
 import userRoutes from './routes/userRoutes';
 import jobRoutes from './routes/jobRoutes';
+import contractRoutes from './routes/contractRoutes';
 
 // --- 2. INICIALIZAÇÃO DO EXPRESS ---
 const app = express();
@@ -58,6 +59,7 @@ app.get('/api/health-check', (req, res) => {
 // Todas as rotas definidas em 'userRoutes' serão prefixadas com '/api'
 app.use('/api', userRoutes);
 app.use('/api/jobs', jobRoutes);
+app.use('/api/contracts', contractRoutes);
 
 // --- 4. INICIAR O SERVIDOR ---
 const PORT = process.env.PORT || 3001;

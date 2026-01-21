@@ -1,9 +1,8 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
 // Em: backend/src/controllers/userController.ts
 
-import { type Response } from 'express';
+import { Request, Response } from 'express';
 import * as admin from 'firebase-admin';
-import { AuthenticatedRequest } from '../middlewares/authMiddleware';
 import { createClient } from '@supabase/supabase-js';
 
 // --- INICIALIZAÇÃO DO CLIENTE SUPABASE (somente com chaves de ambiente) ---
@@ -25,7 +24,7 @@ interface CreateUserPayload {
     // 'photoUrl' e 'isActive' serão definidos pelo backend.
 }
 
-export const createUser = async (req: AuthenticatedRequest, res: Response) => {
+export const createUser = async (req: Request, res: Response) => {
     try {
         const { email, password, name, role, phone, document } = req.body as CreateUserPayload;
 
@@ -127,7 +126,7 @@ interface UpdateUserPayload {
     isActive?: boolean;
 }
 
-export const updateUser = async (req: AuthenticatedRequest, res: Response) => {
+export const updateUser = async (req: Request, res: Response) => {
     try {
         const { userId } = req.params; // Pega o ID do usuário a ser atualizado da URL
         const data = req.body as UpdateUserPayload;
@@ -180,7 +179,7 @@ export const updateUser = async (req: AuthenticatedRequest, res: Response) => {
     }
 };
 
-export const deleteUser = async (req: AuthenticatedRequest, res: Response) => {
+export const deleteUser = async (req: Request, res: Response) => {
     try {
         const { userId } = req.params;
         const adminUid = req.user?.uid;
@@ -220,7 +219,7 @@ export const deleteUser = async (req: AuthenticatedRequest, res: Response) => {
     }
 };
 
-// export const clearPasswordClaim = async (req: AuthenticatedRequest, res: Response) => {
+// export const clearPasswordClaim = async (req: Request, res: Response) => {
 //     const uid = req.user?.uid;
 //     if (!uid) {
 //         return res.status(403).send({ error: 'Usuário não autenticado.' });
@@ -237,7 +236,7 @@ export const deleteUser = async (req: AuthenticatedRequest, res: Response) => {
 //     }
 // };
 
-export const clearPasswordClaim = async (req: AuthenticatedRequest, res: Response) => {
+export const clearPasswordClaim = async (req: Request, res: Response) => {
     const userId = req.user!.uid;
 
     try {
@@ -269,7 +268,7 @@ export const clearPasswordClaim = async (req: AuthenticatedRequest, res: Respons
  * Baixa um arquivo de contrato privado do Supabase e o serve para o cliente.
  * Acesso é verificado pelo middleware de autenticação.
  */
-export const getContractFile = async (req: AuthenticatedRequest, res: Response) => {
+export const getContractFile = async (req: Request, res: Response) => {
     try {
         const { studentId } = req.params;
         const requestingUser = req.user;
