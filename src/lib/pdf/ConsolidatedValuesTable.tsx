@@ -1,7 +1,7 @@
 // Em: src/features/contracts/ConsolidatedValuesTable.tsx
 
 import { formatCurrency } from '../../lib/formatters';
-import type { ContractSessionData } from './api';
+import { ContractSessionData } from '../../types';
 
 interface ConsolidatedValuesTableProps {
   data: ContractSessionData;

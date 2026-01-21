@@ -11,7 +11,7 @@ import {
 // --- IMPORTE OS NOVOS TIPOS E COMPONENTES ---
 import type { ContractSessionData } from '../../types';
 import { getContractContent } from './contractContent';
-import { formatCurrency } from '../../lib/formatters';
+import { PDFTableComponent } from './PDFTableComponent';
 
 // --- ATUALIZE A PROP 'data' ---
 interface ContractPDFDocumentProps {
@@ -72,8 +72,8 @@ const styles = StyleSheet.create({
 
 // --- COMPONENTE PDF ATUALIZADO ---
 export function ContractPDFDocument({ data }: ContractPDFDocumentProps) {
-  const content = getContractContent(data, new Date().getFullYear()); // Usamos o ano atual
-  const { financialResponsible: resp } = data;
+  const { financialResponsible: resp, year } = data;
+  const content = getContractContent(data, year);
 
   return (
     <Document title={`Contrato KL Minas - ${resp.name}`}>
@@ -184,147 +184,147 @@ export function ContractPDFDocument({ data }: ContractPDFDocumentProps) {
   );
 }
 
-// --- COMPONENTE AUXILIAR PARA A TABELA DENTRO DO PDF ---
-// Não podemos usar HTML/divs, temos que usar os componentes do react-pdf
-function PDFTableComponent({ data }: { data: ContractSessionData }) {
-  const tableStyles = StyleSheet.create({
-    table: {
-      display: 'flex',
-      flexDirection: 'column',
-      width: 'auto',
-      border: '1px solid #666',
-      marginVertical: 12,
-    },
-    tableRow: { flexDirection: 'row' },
-    tableColHeader: {
-      width: '14.28%',
-      backgroundColor: '#4a4a4a',
-      color: '#fff',
-      padding: 4,
-      border: '1px solid #666',
-    },
-    tableCol: { width: '14.28%', padding: 4, border: '1px solid #666' },
-    totalRow: {
-      flexDirection: 'row',
-      backgroundColor: '#e0e0e0',
-      fontWeight: 'bold',
-    },
-    totalColLabel: {
-      width: '85.72%',
-      padding: 4,
-      border: '1px solid #666',
-      textAlign: 'right',
-    },
-    totalColValue: {
-      width: '14.28%',
-      padding: 4,
-      border: '1px solid #666',
-      textAlign: 'right',
-    },
-  });
+// // --- COMPONENTE AUXILIAR PARA A TABELA DENTRO DO PDF ---
+// // Não podemos usar HTML/divs, temos que usar os componentes do react-pdf
+// function PDFTableComponent({ data }: { data: ContractSessionData }) {
+//   const tableStyles = StyleSheet.create({
+//     table: {
+//       display: 'flex',
+//       flexDirection: 'column',
+//       width: 'auto',
+//       border: '1px solid #666',
+//       marginVertical: 12,
+//     },
+//     tableRow: { flexDirection: 'row' },
+//     tableColHeader: {
+//       width: '14.28%',
+//       backgroundColor: '#4a4a4a',
+//       color: '#fff',
+//       padding: 4,
+//       border: '1px solid #666',
+//     },
+//     tableCol: { width: '14.28%', padding: 4, border: '1px solid #666' },
+//     totalRow: {
+//       flexDirection: 'row',
+//       backgroundColor: '#e0e0e0',
+//       fontWeight: 'bold',
+//     },
+//     totalColLabel: {
+//       width: '85.72%',
+//       padding: 4,
+//       border: '1px solid #666',
+//       textAlign: 'right',
+//     },
+//     totalColValue: {
+//       width: '14.28%',
+//       padding: 4,
+//       border: '1px solid #666',
+//       textAlign: 'right',
+//     },
+//   });
 
-  return (
-    <View style={tableStyles.table}>
-      {/* Cabeçalho */}
-      <View style={tableStyles.tableRow}>
-        <Text style={{ ...tableStyles.tableColHeader, width: '20%' }}>
-          Aluno(s)
-        </Text>
-        <Text style={{ ...tableStyles.tableColHeader, width: '15%' }}>
-          Modalidade
-        </Text>
-        <Text style={{ ...tableStyles.tableColHeader, width: '12%' }}>
-          Início
-        </Text>
-        <Text style={{ ...tableStyles.tableColHeader, width: '12%' }}>
-          Término
-        </Text>
-        <Text
-          style={{
-            ...tableStyles.tableColHeader,
-            width: '13%',
-            textAlign: 'right',
-          }}
-        >
-          V. Integral
-        </Text>
-        <Text
-          style={{
-            ...tableStyles.tableColHeader,
-            width: '13%',
-            textAlign: 'right',
-          }}
-        >
-          V. Desconto
-        </Text>
-        <Text style={{ ...tableStyles.tableColHeader, width: '15%' }}>
-          Motivo
-        </Text>
-      </View>
-      {/* Itens */}
-      {data.subscriptionItems.map((item, index) => (
-        <View
-          key={index}
-          style={tableStyles.tableRow}
-        >
-          <Text style={{ ...tableStyles.tableCol, width: '20%' }}>
-            {item.studentName.toUpperCase()}
-          </Text>
-          <Text style={{ ...tableStyles.tableCol, width: '15%' }}>
-            {item.courseName.toUpperCase()}
-          </Text>
-          <Text style={{ ...tableStyles.tableCol, width: '12%' }}>
-            {item.startDate}
-          </Text>
-          <Text style={{ ...tableStyles.tableCol, width: '12%' }}>
-            {item.endDate}
-          </Text>
-          <Text
-            style={{
-              ...tableStyles.tableCol,
-              width: '13%',
-              textAlign: 'right',
-            }}
-          >
-            {formatCurrency(item.fullPrice)}
-          </Text>
-          <Text
-            style={{
-              ...tableStyles.tableCol,
-              width: '13%',
-              textAlign: 'right',
-            }}
-          >
-            {formatCurrency(item.appliedPrice)}
-          </Text>
-          <Text style={{ ...tableStyles.tableCol, width: '15%' }}>
-            {item.discountReason}
-          </Text>
-        </View>
-      ))}
-      {/* Totais */}
-      <View style={tableStyles.totalRow}>
-        <Text style={tableStyles.totalColLabel}>TAXA DE MATRÍCULA</Text>
-        <Text style={tableStyles.totalColValue}>
-          {formatCurrency(data.enrollmentFee)}
-        </Text>
-      </View>
-      <View style={tableStyles.totalRow}>
-        <Text style={tableStyles.totalColLabel}>
-          TOTAL MENSALIDADE INTEGRAL
-        </Text>
-        <Text style={tableStyles.totalColValue}>
-          {formatCurrency(data.totalFullPrice)}
-        </Text>
-      </View>
-      <View style={tableStyles.totalRow}>
-        <Text style={tableStyles.totalColLabel}>
-          TOTAL MENSALIDADE COM DESCONTOS
-        </Text>
-        <Text style={tableStyles.totalColValue}>
-          {formatCurrency(data.totalAppliedPrice)}
-        </Text>
-      </View>
-    </View>
-  );
-}
+//   return (
+//     <View style={tableStyles.table}>
+//       {/* Cabeçalho */}
+//       <View style={tableStyles.tableRow}>
+//         <Text style={{ ...tableStyles.tableColHeader, width: '20%' }}>
+//           Aluno(s)
+//         </Text>
+//         <Text style={{ ...tableStyles.tableColHeader, width: '15%' }}>
+//           Modalidade
+//         </Text>
+//         <Text style={{ ...tableStyles.tableColHeader, width: '12%' }}>
+//           Início
+//         </Text>
+//         <Text style={{ ...tableStyles.tableColHeader, width: '12%' }}>
+//           Término
+//         </Text>
+//         <Text
+//           style={{
+//             ...tableStyles.tableColHeader,
+//             width: '13%',
+//             textAlign: 'right',
+//           }}
+//         >
+//           V. Integral
+//         </Text>
+//         <Text
+//           style={{
+//             ...tableStyles.tableColHeader,
+//             width: '13%',
+//             textAlign: 'right',
+//           }}
+//         >
+//           V. Desconto
+//         </Text>
+//         <Text style={{ ...tableStyles.tableColHeader, width: '15%' }}>
+//           Motivo
+//         </Text>
+//       </View>
+//       {/* Itens */}
+//       {data.subscriptionItems.map((item, index) => (
+//         <View
+//           key={index}
+//           style={tableStyles.tableRow}
+//         >
+//           <Text style={{ ...tableStyles.tableCol, width: '20%' }}>
+//             {item.studentName.toUpperCase()}
+//           </Text>
+//           <Text style={{ ...tableStyles.tableCol, width: '15%' }}>
+//             {item.courseName.toUpperCase()}
+//           </Text>
+//           <Text style={{ ...tableStyles.tableCol, width: '12%' }}>
+//             {item.startDate}
+//           </Text>
+//           <Text style={{ ...tableStyles.tableCol, width: '12%' }}>
+//             {item.endDate}
+//           </Text>
+//           <Text
+//             style={{
+//               ...tableStyles.tableCol,
+//               width: '13%',
+//               textAlign: 'right',
+//             }}
+//           >
+//             {formatCurrency(item.fullPrice)}
+//           </Text>
+//           <Text
+//             style={{
+//               ...tableStyles.tableCol,
+//               width: '13%',
+//               textAlign: 'right',
+//             }}
+//           >
+//             {formatCurrency(item.appliedPrice)}
+//           </Text>
+//           <Text style={{ ...tableStyles.tableCol, width: '15%' }}>
+//             {item.discountReason}
+//           </Text>
+//         </View>
+//       ))}
+//       {/* Totais */}
+//       <View style={tableStyles.totalRow}>
+//         <Text style={tableStyles.totalColLabel}>TAXA DE MATRÍCULA</Text>
+//         <Text style={tableStyles.totalColValue}>
+//           {formatCurrency(data.enrollmentFee)}
+//         </Text>
+//       </View>
+//       <View style={tableStyles.totalRow}>
+//         <Text style={tableStyles.totalColLabel}>
+//           TOTAL MENSALIDADE INTEGRAL
+//         </Text>
+//         <Text style={tableStyles.totalColValue}>
+//           {formatCurrency(data.totalFullPrice)}
+//         </Text>
+//       </View>
+//       <View style={tableStyles.totalRow}>
+//         <Text style={tableStyles.totalColLabel}>
+//           TOTAL MENSALIDADE COM DESCONTOS
+//         </Text>
+//         <Text style={tableStyles.totalColValue}>
+//           {formatCurrency(data.totalAppliedPrice)}
+//         </Text>
+//       </View>
+//     </View>
+//   );
+// }

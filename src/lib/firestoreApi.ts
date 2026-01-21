@@ -90,6 +90,8 @@ export async function getContractSessionData(contractId: string): Promise<Contra
     }, 0);
 
     return {
+        year: contract.year,
+        status: contract.status,
         financialResponsible,
         subscriptionItems,
         enrollmentFee: totalEnrollmentFee,
