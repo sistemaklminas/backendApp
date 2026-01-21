@@ -17,6 +17,8 @@
     "@supabase/supabase-js": "^2.79.0",
     "@types/cors": "^2.8.19",
     "@types/express": "^5.0.5",
+    "@types/react": "^19.2.9",
+    "@types/uuid": "^10.0.0",
     "axios": "^1.13.2",
     "cors": "^2.8.5",
     "dotenv": "^17.2.3",
@@ -26,8 +28,6 @@
     "typescript": "^5.9.3"
   },
   "devDependencies": {
-    "@types/react": "^19.2.9",
-    "@types/uuid": "^10.0.0",
     "ts-node-dev": "^2.0.0"
   }
 }

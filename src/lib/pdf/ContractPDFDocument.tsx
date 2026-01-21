@@ -131,9 +131,6 @@ export function ContractPDFDocument({ data }: ContractPDFDocumentProps) {
                 </Text>
               );
             case 'table':
-              // O componente da tabela não pode ser usado diretamente aqui.
-              // Precisamos recriar sua estrutura com os componentes do react-pdf.
-              // A melhor abordagem é passar os dados para um componente PDF específico.
               return (
                 <PDFTableComponent
                   key={index}
