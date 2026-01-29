@@ -342,8 +342,9 @@ export const updateUser = async (req: Request, res: Response) => {
         // --- 2. Atualizar userProfiles/{uid} ---
         const firestoreUpdatePayload: Record<string, any> = {};
         for (const key in data) {
-            if (key !== 'password') {
-                firestoreUpdatePayload[key] = data[key as keyof typeof data];
+            const value = data[key as keyof typeof data];
+            if (key !== 'password' && value !== undefined) {
+                firestoreUpdatePayload[key] = value;
             }
         }
         firestoreUpdatePayload.updatedAt = admin.firestore.FieldValue.serverTimestamp();
