@@ -100,5 +100,38 @@ export async function getContractSessionData(contractId: string): Promise<Contra
     };
 }
 
+/**
+ * Encontra o contrato de um aluno para um determinado ano e retorna seu status.
+ * @param studentId O ID do aluno.
+ * @param year O ano letivo a ser verificado.
+ * @returns O status do contrato ('pending', 'sent_to_signature', 'signed') ou null se nenhum contrato for encontrado.
+ */
+export async function getStudentContractStatus(
+    studentId: string,
+    year: number,
+): Promise<Contract['status'] | null> {
+    if (!studentId || !year) {
+        return null;
+    }
+
+    // A forma mais eficiente de encontrar o contrato de um aluno é usar uma query 'array-contains'.
+    // Isso exige que o campo 'studentIds' seja um array no seu documento de contrato.
+    const contractsQuery = db
+        .collection('contracts')
+        .where('year', '==', year)
+        .where('studentIds', 'array-contains', studentId)
+        .limit(1); // Um aluno só deve pertencer a um contrato por ano.
+
+    const snapshot = await contractsQuery.get();
+
+    if (snapshot.empty) {
+        console.warn(`Nenhum contrato encontrado para o aluno ${studentId} no ano ${year}.`);
+        return null; // Retorna null se nenhum contrato for encontrado
+    }
+
+    const contract = snapshot.docs[0].data() as Contract;
+    return contract.status;
+}
+
 // Exportando formatCurrency para ser usado no PDF
 export { formatCurrency };
