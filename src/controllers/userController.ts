@@ -12,6 +12,18 @@ const supabaseAdmin = createClient(
     process.env.VITE_SUPABASE_SERVICE_KEY!
 );
 
+function toE164BR(phone?: string): string | undefined {
+    if (!phone) return undefined;
+
+    const digits = phone.replace(/\D/g, '');
+
+    // precisa ter DDD(2) + número(8 ou 9) => 10 ou 11 dígitos
+    if (!/^\d{10,11}$/.test(digits)) return undefined;
+
+    return `+55${digits}`;
+}
+
+
 // --- 1. PAYLOAD ALINHADO COM SUA TIPAGEM ---
 // Este é o formato de dados que o frontend deve enviar.
 interface CreateUserPayload {
@@ -153,12 +165,14 @@ export const createUser = async (req: Request, res: Response) => {
             return res.status(403).send({ error: 'ID do administrador não encontrado na autenticação.' });
         }
 
+        const e164Phone = toE164BR(phone);
+
         // --- Criar usuário no Firebase Auth ---
         const userRecord = await admin.auth().createUser({
             email,
             password,
             displayName: name,
-            phoneNumber: phone, // se undefined, ignora
+            ...(e164Phone ? { phoneNumber: e164Phone } : {}), // se undefined, ignora
         });
 
         const uid = userRecord.uid;
@@ -333,7 +347,13 @@ export const updateUser = async (req: Request, res: Response) => {
         if (data.email) authUpdatePayload.email = data.email;
         if (data.password) authUpdatePayload.password = data.password;
         if (data.name) authUpdatePayload.displayName = data.name;
-        if (data.phone) authUpdatePayload.phoneNumber = data.phone;
+        if (data.phone) {
+            const e164Phone = toE164BR(data.phone);
+            if (!e164Phone) {
+                return res.status(400).send({ error: 'Telefone inválido. Use DDD + número (10 ou 11 dígitos).' });
+            }
+            authUpdatePayload.phoneNumber = e164Phone;
+        }
 
         if (Object.keys(authUpdatePayload).length > 0) {
             await admin.auth().updateUser(userId, authUpdatePayload);
