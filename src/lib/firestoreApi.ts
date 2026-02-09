@@ -7,7 +7,9 @@ import {
     StudentSubscription,
     Course,
     Enrollment,
-    ContractSessionData
+    ContractSessionData,
+    ContractAddendum,
+    AddendumSessionData
 } from '../types';
 import { admin, db } from './firebaseAdmin';
 
@@ -97,6 +99,41 @@ export async function getContractSessionData(contractId: string): Promise<Contra
         enrollmentFee: totalEnrollmentFee,
         totalFullPrice,
         totalAppliedPrice,
+    };
+}
+
+export async function getAddendumSessionData(addendumId: string): Promise<AddendumSessionData> {
+    const addendumSnap = await db.collection('contractAddendums').doc(addendumId).get();
+    if (!addendumSnap.exists) throw new Error('Aditivo não encontrado.');
+    const addendum = addendumSnap.data() as ContractAddendum;
+
+    const responsibleSnap = await db.collection('financialResponsibles').doc(addendum.financialResponsibleId).get();
+    if (!responsibleSnap.exists) throw new Error('Responsável financeiro não encontrado.');
+    const financialResponsible = responsibleSnap.data() as FinancialResponsible;
+
+    const afterSnapshot = (addendum.snapshot?.after || {}) as Record<string, any>;
+    const subscriptionItems = (afterSnapshot.subscriptionItems || []) as AddendumSessionData['subscriptionItems'];
+    const totalFullPrice = Number(afterSnapshot.totalFullPrice || 0);
+    const totalAppliedPrice = Number(afterSnapshot.totalAppliedPrice || 0);
+    const enrollmentFeeUpdated = Number(addendum.snapshot?.enrollmentFeeUpdated ?? afterSnapshot.enrollmentFee ?? 0);
+    const enrollmentFeeOriginal = Number(addendum.snapshot?.enrollmentFeeOriginal ?? (addendum.snapshot?.before as any)?.enrollmentFee ?? 0);
+    const enrollmentFeeDifference = Number(
+        addendum.snapshot?.enrollmentFeeDifference ?? Math.max(0, enrollmentFeeUpdated - enrollmentFeeOriginal)
+    );
+
+    return {
+        addendumId,
+        contractId: addendum.contractId,
+        year: addendum.year,
+        financialResponsible,
+        reason: addendum.reason,
+        subscriptionItems,
+        enrollmentFeeOriginal,
+        enrollmentFeeUpdated,
+        enrollmentFeeDifference,
+        totalFullPrice,
+        totalAppliedPrice,
+        generatedAt: addendum.generatedAt,
     };
 }
 

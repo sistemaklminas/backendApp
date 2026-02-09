@@ -6,9 +6,10 @@ import axios from 'axios';
 // --- MUDANÇA NA IMPORTAÇÃO ---
 import { renderToStream } from '@react-pdf/renderer';
 import { ContractPDFDocument } from '../lib/pdf/ContractPDFDocument';
-import { getContractSessionData } from '../lib/firestoreApi';
+import { AddendumPDFDocument } from '../lib/pdf/AddendumPDFDocument';
+import { getContractSessionData, getAddendumSessionData } from '../lib/firestoreApi';
 import { db } from '../lib/firebaseAdmin';
-import { Contract, ContractSessionData } from '../types'; // <<< Importar o tipo
+import { Contract, ContractAddendum, ContractSessionData, AddendumSessionData } from '../types'; // <<< Importar o tipo
 
 // --- FUNÇÃO HELPER ATUALIZADA ---
 // Agora usa renderToStream e o tipo correto para contractData
@@ -22,6 +23,20 @@ const generatePdfAsBase64 = async (
 
   // 2. Consuma o stream. O tipo 'any' aqui é aceitável porque
   //    o stream retornado não tem um tipo Node.js padrão.
+  const chunks: any[] = [];
+  for await (const chunk of stream) {
+    chunks.push(chunk);
+  }
+  return Buffer.concat(chunks).toString('base64');
+};
+
+const generateAddendumPdfAsBase64 = async (
+  addendumData: AddendumSessionData,
+): Promise<string> => {
+  const stream = await renderToStream(
+    <AddendumPDFDocument data={addendumData} />,
+  );
+
   const chunks: any[] = [];
   for await (const chunk of stream) {
     chunks.push(chunk);
@@ -180,6 +195,139 @@ export const sendContractForSignature = async (req: Request, res: Response) => {
   }
 };
 
+export const sendAddendumForSignature = async (req: Request, res: Response) => {
+  const { addendumId, initiator } = req.body;
+
+  if (!addendumId || !initiator) {
+    return res
+      .status(400)
+      .json({ error: 'addendumId e initiator são obrigatórios.' });
+  }
+
+  try {
+    const addendumRef = db.collection('contractAddendums').doc(addendumId);
+    const addendumDoc = await addendumRef.get();
+    if (!addendumDoc.exists) {
+      return res.status(404).json({ error: 'Aditivo não encontrado.' });
+    }
+    const addendum = addendumDoc.data() as ContractAddendum;
+
+    if (addendum.status === 'signed') {
+      return res
+        .status(400)
+        .json({ error: 'Este aditivo já foi finalizado.' });
+    }
+
+    if (addendum.status === 'pending') {
+      console.log(
+        `Iniciando novo documento no ZapSign para o aditivo ${addendumId}...`,
+      );
+
+      const addendumData = await getAddendumSessionData(addendumId);
+      const base64Pdf = await generateAddendumPdfAsBase64(addendumData);
+
+      const zapSignPayload = {
+        external_id: `addendum:${addendumId}`,
+        name: `Aditivo KL Minas - ${addendumData.financialResponsible.name}`,
+        base64_pdf: base64Pdf,
+        auto_sign: {
+          enabled: true,
+          position_x: '65',
+          position_y: '85',
+          position_page: -1,
+        },
+        signers: [
+          {
+            name: addendumData.financialResponsible.name,
+            email: addendumData.financialResponsible.email,
+            phone_country: '55',
+            phone_number: addendumData.financialResponsible.phone.replace(
+              /\D/g,
+              '',
+            ),
+            auth_mode: 'assinatura_tela',
+            position_x: '20',
+            position_y: '85',
+            position_page: -1,
+            redirect_after_sign: `${process.env.FRONTEND_URL}/assinatura-sucesso?addendumId=${addendumId}`,
+            get_sign_url: initiator === 'PARENT',
+          },
+        ],
+      };
+
+      const response = await axios.post(
+        'https://api.zapsign.com.br/api/v1/docs/',
+        zapSignPayload,
+        {
+          headers: {
+            Authorization: `Bearer ${process.env.VITE_ZAPSIGN_API_TOKEN}`,
+          },
+        },
+      );
+      const zapSignDocToken = response.data.token;
+
+      await addendumRef.update({
+        status: 'sent',
+        zapSignToken: zapSignDocToken,
+        sentAt: new Date(),
+      });
+
+      let signUrl = null;
+      if (initiator === 'PARENT' && response.data.signers[0].get_sign_url) {
+        signUrl = response.data.signers[0].sign_url;
+      }
+
+      return res.status(200).json({
+        success: true,
+        message: 'Documento criado e enviado.',
+        sign_url: signUrl,
+      });
+    }
+
+    if (addendum.status === 'sent') {
+      console.log(
+        `Documento para o aditivo ${addendumId} já existe. Usando token: ${addendum.zapSignToken}`,
+      );
+
+      if (initiator === 'ADMIN') {
+        await axios.post(
+          `https://api.zapsign.com.br/api/v1/docs/${addendum.zapSignToken}/resend-email-or-sms`,
+          {},
+          {
+            headers: {
+              Authorization: `Bearer ${process.env.VITE_ZAPSIGN_API_TOKEN}`,
+            },
+          },
+        );
+        return res
+          .status(200)
+          .json({ success: true, message: 'Lembrete reenviado com sucesso.' });
+      }
+
+      if (initiator === 'PARENT') {
+        const response = await axios.get(
+          `https://api.zapsign.com.br/api/v1/docs/${addendum.zapSignToken}`,
+          {
+            headers: {
+              Authorization: `Bearer ${process.env.VITE_ZAPSIGN_API_TOKEN}`,
+            },
+          },
+        );
+        const signUrl = response.data.signers[0].sign_url;
+        return res.status(200).json({ success: true, sign_url: signUrl });
+      }
+    }
+
+    return res.status(500).json({ error: 'Estado do aditivo inválido.' });
+  } catch (error: any) {
+    console.error(
+      'Erro ao enviar aditivo para ZapSign:',
+      error.response?.data || error.message,
+    );
+    return res.status(500).json({ error: 'Falha ao processar o aditivo.' });
+  }
+};
+
 export const zapSignWebhookHandler = async (req: Request, res: Response) => {
   const event = req.body;
 
@@ -187,18 +335,29 @@ export const zapSignWebhookHandler = async (req: Request, res: Response) => {
   // mas por simplicidade vamos pular essa parte por enquanto.
 
   if (event.event.type === 'doc_signed') {
-    const contractId = event.doc.external_id;
+    const externalId: string = event.doc.external_id;
 
     try {
-      const contractRef = db.collection('contracts').doc(contractId);
-      await contractRef.update({
-        status: 'signed',
-        signedAt: new Date(),
-      });
-      console.log(`Contrato ${contractId} atualizado para 'signed'.`);
+      if (externalId.startsWith('addendum:')) {
+        const addendumId = externalId.replace('addendum:', '');
+        const addendumRef = db.collection('contractAddendums').doc(addendumId);
+        await addendumRef.update({
+          status: 'signed',
+          signedAt: new Date(),
+        });
+        console.log(`Aditivo ${addendumId} atualizado para 'signed'.`);
+      } else {
+        const contractId = externalId;
+        const contractRef = db.collection('contracts').doc(contractId);
+        await contractRef.update({
+          status: 'signed',
+          signedAt: new Date(),
+        });
+        console.log(`Contrato ${contractId} atualizado para 'signed'.`);
+      }
     } catch (error) {
       console.error(
-        `Erro ao atualizar contrato ${contractId} via webhook:`,
+        `Erro ao atualizar documento via webhook:`,
         error,
       );
     }
