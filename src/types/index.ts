@@ -68,6 +68,47 @@ export interface Contract {
     zapSignToken?: string;
 }
 
+export interface ContractAddendum {
+    id: string;
+    contractId: string;
+    year: number;
+    financialResponsibleId: string;
+    reason: {
+        type: 'MODALITY_CHANGE' | 'FREQUENCY_CHANGE' | 'SIBLING_ADDED' | 'NEW_MODALITY_ADDED' | 'MODALITY_REMOVED' | 'OTHER';
+        description: string;
+    };
+    snapshot: {
+        before: Record<string, any>;
+        after: Record<string, any>;
+        enrollmentFeeOriginal?: number;
+        enrollmentFeeUpdated?: number;
+        enrollmentFeeDifference?: number;
+    };
+    status: 'pending' | 'sent' | 'signed' | 'declined';
+    provider?: 'ZapSign' | null;
+    providerToken?: string | null;
+    signedFileUrl?: string | null;
+    zapSignToken?: string | null;
+    generatedAt: Timestamp;
+    sentAt?: Timestamp | null;
+    signedAt?: Timestamp | null;
+}
+
+export interface AddendumSessionData {
+    addendumId: string;
+    contractId: string;
+    year: number;
+    financialResponsible: FinancialResponsible;
+    reason: ContractAddendum['reason'];
+    subscriptionItems: ContractSessionData['subscriptionItems'];
+    enrollmentFeeOriginal: number;
+    enrollmentFeeUpdated: number;
+    enrollmentFeeDifference: number;
+    totalFullPrice: number;
+    totalAppliedPrice: number;
+    generatedAt: Timestamp;
+}
+
 
 // --- TIPO DE DADOS PARA O TEMPLATE DO CONTRATO ---
 
