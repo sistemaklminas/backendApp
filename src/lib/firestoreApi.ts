@@ -35,16 +35,36 @@ export async function getContractSessionData(contractId: string): Promise<Contra
     if (!responsibleSnap.exists) throw new Error('Responsável financeiro não encontrado.');
     const financialResponsible = responsibleSnap.data() as FinancialResponsible;
 
-    const studentIds = contract.studentIds;
-    const studentsQuery = await db.collection('students').where(admin.firestore.FieldPath.documentId(), 'in', studentIds).get();
-    const studentsMap = new Map(studentsQuery.docs.map(d => [d.id, d.data() as Student]));
-
     const subscriptionsQuery = await db.collection('subscriptions')
-        .where('studentId', 'in', studentIds)
+        .where('studentId', 'in', contract.studentIds)
         .where('year', '==', contract.year)
         .where('isActive', '==', true)
         .get();
-    const allSubscriptions = subscriptionsQuery.docs.map(d => d.data() as StudentSubscription);
+    let allSubscriptions = subscriptionsQuery.docs.map(d => d.data() as StudentSubscription);
+
+    if (allSubscriptions.length === 0) {
+        throw new Error('Nenhuma inscrição ativa encontrada para gerar o contrato.');
+    }
+
+    const subscriptionStudentIds = [...new Set(allSubscriptions.map(sub => sub.studentId))];
+    const studentsQuery = await db.collection('students')
+        .where(admin.firestore.FieldPath.documentId(), 'in', subscriptionStudentIds)
+        .get();
+    const studentsMap = new Map(studentsQuery.docs.map(d => [d.id, d.data() as Student]));
+    const validStudentIds = new Set(
+        studentsQuery.docs
+            .filter(docSnap => {
+                const data = docSnap.data() as Student;
+                return Array.isArray(data.activeYears) && data.activeYears.includes(contract.year);
+            })
+            .map(docSnap => docSnap.id)
+    );
+
+    allSubscriptions = allSubscriptions.filter(sub => validStudentIds.has(sub.studentId));
+
+    if (allSubscriptions.length === 0) {
+        throw new Error('Nenhuma inscrição ativa encontrada para gerar o contrato.');
+    }
 
     const courseIds = [...new Set(allSubscriptions.map(sub => sub.courseId))];
     const coursesQuery = await db.collection('courses').where(admin.firestore.FieldPath.documentId(), 'in', courseIds).get();
@@ -79,7 +99,8 @@ export async function getContractSessionData(contractId: string): Promise<Contra
         });
     }
 
-    const enrollmentPromises = studentIds.map(id => db.collection('students').doc(id).collection('enrollments').doc(String(contract.year)).get());
+    const enrollmentPromises = [...new Set(allSubscriptions.map(sub => sub.studentId))]
+        .map(id => db.collection('students').doc(id).collection('enrollments').doc(String(contract.year)).get());
     const enrollmentDocs = await Promise.all(enrollmentPromises);
     const totalEnrollmentFee = enrollmentDocs.reduce((sum, doc) => {
         if (doc.exists) {

@@ -33,6 +33,7 @@ interface CreateUserPayload {
     role: "root" | "admin" | "editor" | 'coordinator' | "teacher" | "user";
     phone?: string;
     document?: string;
+    linkTeacherId?: string;
     // 'photoUrl' e 'isActive' serão definidos pelo backend.
 }
 
@@ -131,7 +132,7 @@ interface CreateUserPayload {
 
 export const createUser = async (req: Request, res: Response) => {
     try {
-        const { email, password, name, role, phone, document } = req.body as CreateUserPayload;
+        const { email, password, name, role, phone, document, linkTeacherId } = req.body as CreateUserPayload;
 
         // --- Validação ---
         if (!email || !password || !name || !role) {
@@ -167,9 +168,28 @@ export const createUser = async (req: Request, res: Response) => {
 
         const e164Phone = toE164BR(phone);
 
+        const normalizedEmail = email.toLowerCase();
+
+        if (role === 'teacher') {
+            const existingTeacherSnap = await admin.firestore()
+                .collection('teachers')
+                .where('email', '==', normalizedEmail)
+                .limit(1)
+                .get();
+
+            if (!existingTeacherSnap.empty && !linkTeacherId) {
+                const teacherDoc = existingTeacherSnap.docs[0];
+                return res.status(409).send({
+                    error: 'TEACHER_EMAIL_EXISTS',
+                    teacherId: teacherDoc.id,
+                    teacherName: teacherDoc.data()?.name || '',
+                });
+            }
+        }
+
         // --- Criar usuário no Firebase Auth ---
         const userRecord = await admin.auth().createUser({
-            email,
+            email: normalizedEmail,
             password,
             displayName: name,
             ...(e164Phone ? { phoneNumber: e164Phone } : {}), // se undefined, ignora
@@ -184,7 +204,7 @@ export const createUser = async (req: Request, res: Response) => {
             id: uid,
             publicId: newPublicId,
             name,
-            email,
+            email: normalizedEmail,
             role,
             phone: phone || null,
             document: document || null,
@@ -199,40 +219,83 @@ export const createUser = async (req: Request, res: Response) => {
 
         await userProfileRef.set(userProfileData);
 
-        // --- Se for teacher, criar teacher profile ---
+        // --- Se for teacher, criar ou vincular teacher profile ---
         if (role === 'teacher') {
-            const teacherCounterRef = admin.firestore().collection('counters').doc('teacherProfiles');
+            if (linkTeacherId) {
+                const teacherRef = admin.firestore().collection('teachers').doc(linkTeacherId);
+                await teacherRef.update({
+                    name,
+                    email: normalizedEmail,
+                    phone,
+                    authUid: uid,
+                    isActive: true,
+                    updatedBy: adminUid,
+                    updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+                });
+            } else {
+                const teacherCounterRef = admin.firestore().collection('counters').doc('teacherProfiles');
 
-            const newTeacherPublicId = await admin.firestore().runTransaction<number>(async (transaction) => {
-                const counterDoc = await transaction.get(teacherCounterRef);
-                if (!counterDoc.exists) {
-                    const nextId = 1;
-                    transaction.set(teacherCounterRef, { lastId: nextId });
-                    return nextId;
+                const newTeacherPublicId = await admin.firestore().runTransaction<number>(async (transaction) => {
+                    const counterDoc = await transaction.get(teacherCounterRef);
+                    if (!counterDoc.exists) {
+                        const nextId = 1;
+                        transaction.set(teacherCounterRef, { lastId: nextId });
+                        return nextId;
+                    } else {
+                        const lastId = counterDoc.data()?.lastId || 0;
+                        const nextId = lastId + 1;
+                        transaction.update(teacherCounterRef, { lastId: nextId });
+                        return nextId;
+                    }
+                });
+
+                const teacherRef = admin.firestore().collection('teachers').doc(uid);
+
+                await teacherRef.set({
+                    id: uid,
+                    publicId: newTeacherPublicId,
+                    name,
+                    email: normalizedEmail,
+                    phone, // aqui phone é obrigatório (já validamos)
+                    authUid: uid,
+                    isActive: true,
+
+                    createdBy: adminUid,
+                    updatedBy: adminUid,
+                    createdAt: admin.firestore.FieldValue.serverTimestamp(),
+                    updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+                });
+            }
+        }
+
+        if (role === 'user') {
+            if (document) {
+                const responsiblesSnap = await admin.firestore()
+                    .collection('financialResponsibles')
+                    .where('document', '==', document)
+                    .limit(1)
+                    .get();
+                if (!responsiblesSnap.empty) {
+                    const responsibleDoc = responsiblesSnap.docs[0];
+                    const responsibleData = responsibleDoc.data() as { authUid?: string };
+                    if (!responsibleData.authUid || responsibleData.authUid === uid) {
+                        await responsibleDoc.ref.update({ authUid: uid });
+                    }
                 } else {
-                    const lastId = counterDoc.data()?.lastId || 0;
-                    const nextId = lastId + 1;
-                    transaction.update(teacherCounterRef, { lastId: nextId });
-                    return nextId;
+                    const parentsSnap = await admin.firestore()
+                        .collection('parents')
+                        .where('email', '==', normalizedEmail)
+                        .limit(1)
+                        .get();
+                    if (!parentsSnap.empty) {
+                        const parentDoc = parentsSnap.docs[0];
+                        const parentData = parentDoc.data() as { authUid?: string };
+                        if (!parentData.authUid || parentData.authUid === uid) {
+                            await parentDoc.ref.update({ authUid: uid });
+                        }
+                    }
                 }
-            });
-
-            const teacherRef = admin.firestore().collection('teachers').doc(uid);
-
-            await teacherRef.set({
-                id: uid,
-                publicId: newTeacherPublicId,
-                name,
-                email,
-                phone, // aqui phone é obrigatório (já validamos)
-                authUid: uid,
-                isActive: true,
-
-                createdBy: adminUid,
-                updatedBy: adminUid,
-                createdAt: admin.firestore.FieldValue.serverTimestamp(),
-                updatedAt: admin.firestore.FieldValue.serverTimestamp(),
-            });
+            }
         }
 
         console.log(`Usuário ${name} (UID: ${uid}, PublicID: ${newPublicId}) criado com sucesso.`);
@@ -450,6 +513,40 @@ export const updateUser = async (req: Request, res: Response) => {
                     updatedBy: adminUid,
                     updatedAt: admin.firestore.FieldValue.serverTimestamp(),
                 });
+            }
+        }
+
+        if (finalRole === 'user') {
+            const finalDocument = (data.document ?? existingProfile.document) as string | undefined;
+            const finalEmail = (data.email ?? existingProfile.email) as string | undefined;
+            const normalizedEmail = (finalEmail || '').toLowerCase();
+
+            if (finalDocument) {
+                const responsiblesSnap = await admin.firestore()
+                    .collection('financialResponsibles')
+                    .where('document', '==', finalDocument)
+                    .limit(1)
+                    .get();
+                if (!responsiblesSnap.empty) {
+                    const responsibleDoc = responsiblesSnap.docs[0];
+                    const responsibleData = responsibleDoc.data() as { authUid?: string };
+                    if (!responsibleData.authUid || responsibleData.authUid === userId) {
+                        await responsibleDoc.ref.update({ authUid: userId });
+                    }
+                } else if (normalizedEmail) {
+                    const parentsSnap = await admin.firestore()
+                        .collection('parents')
+                        .where('email', '==', normalizedEmail)
+                        .limit(1)
+                        .get();
+                    if (!parentsSnap.empty) {
+                        const parentDoc = parentsSnap.docs[0];
+                        const parentData = parentDoc.data() as { authUid?: string };
+                        if (!parentData.authUid || parentData.authUid === userId) {
+                            await parentDoc.ref.update({ authUid: userId });
+                        }
+                    }
+                }
             }
         }
 
