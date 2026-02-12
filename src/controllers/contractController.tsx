@@ -38,6 +38,36 @@ const getZapSignHeaders = () => {
 const normalizePhone = (value: string | undefined | null) =>
   String(value || '').replace(/\D/g, '');
 
+const getResponsiblePhoneDigits = (responsible: any): string => {
+  const candidates: Array<string | undefined | null> = [
+    responsible?.phone,
+    responsible?.phonePrimary,
+    responsible?.phoneSecondary,
+    responsible?.phoneTertiary,
+    responsible?.phones?.primary,
+  ];
+
+  for (const candidate of candidates) {
+    const normalized = normalizePhone(candidate);
+    if (normalized) return normalized;
+  }
+
+  const objectCandidates = [
+    responsible?.phonePrimary,
+    responsible?.phoneSecondary,
+    responsible?.phoneTertiary,
+  ];
+  for (const candidate of objectCandidates) {
+    if (candidate && typeof candidate === 'object') {
+      const ddd = String(candidate.ddd || '').replace(/\D/g, '');
+      const number = String(candidate.number || '').replace(/\D/g, '');
+      if (ddd || number) return `${ddd}${number}`;
+    }
+  }
+
+  return '';
+};
+
 const getUserProfileByUid = async (uid: string) => {
   const docSnap = await db.collection('userProfiles').doc(uid).get();
   return docSnap.exists ? docSnap.data() as { role?: string; document?: string } : null;
@@ -140,6 +170,14 @@ export const sendContractForSignature = async (req: Request, res: Response) => {
 
       const contractData = await getContractSessionData(contractId);
       const base64Pdf = await generatePdfAsBase64(contractData);
+      const signerPhone = getResponsiblePhoneDigits(
+        contractData.financialResponsible,
+      );
+      if (!signerPhone) {
+        throw new Error(
+          'Responsável financeiro sem telefone válido para envio à ZapSign.',
+        );
+      }
 
       const zapSignPayload = {
         external_id: contractId,
@@ -156,10 +194,7 @@ export const sendContractForSignature = async (req: Request, res: Response) => {
             name: contractData.financialResponsible.name,
             email: contractData.financialResponsible.email,
             phone_country: '55',
-            phone_number: contractData.financialResponsible.phone.replace(
-              /\D/g,
-              '',
-            ),
+            phone_number: signerPhone,
             auth_mode: 'assinatura_tela',
             position_x: '20',
             position_y: '85',
@@ -276,6 +311,14 @@ export const sendAddendumForSignature = async (req: Request, res: Response) => {
 
       const addendumData = await getAddendumSessionData(addendumId);
       const base64Pdf = await generateAddendumPdfAsBase64(addendumData);
+      const signerPhone = getResponsiblePhoneDigits(
+        addendumData.financialResponsible,
+      );
+      if (!signerPhone) {
+        throw new Error(
+          'Responsável financeiro sem telefone válido para envio à ZapSign.',
+        );
+      }
 
       const zapSignPayload = {
         external_id: `addendum:${addendumId}`,
@@ -292,10 +335,7 @@ export const sendAddendumForSignature = async (req: Request, res: Response) => {
             name: addendumData.financialResponsible.name,
             email: addendumData.financialResponsible.email,
             phone_country: '55',
-            phone_number: addendumData.financialResponsible.phone.replace(
-              /\D/g,
-              '',
-            ),
+            phone_number: signerPhone,
             auth_mode: 'assinatura_tela',
             position_x: '20',
             position_y: '85',
