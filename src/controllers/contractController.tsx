@@ -199,6 +199,7 @@ const buildSignerPayload = (
       ? undefined
       : {
           enabled: true,
+          signature_placement: ZAPSIGN_SCHOOL_SIGNATURE_ANCHOR,
           position_x: '65',
           position_y: '85',
           position_page: -1,
@@ -814,12 +815,20 @@ export const zapSignWebhookHandler = async (req: Request, res: Response) => {
     payload?.type ||
     '';
   const eventType = String(eventTypeRaw).toLowerCase();
-  const docPayload =
+  const docPayloadCandidate =
     payload?.doc ||
     payload?.document ||
     payload?.event?.doc ||
     payload?.data?.doc ||
+    payload?.data?.document ||
     null;
+  const docPayload =
+    docPayloadCandidate ||
+    (payload?.external_id || payload?.externalId
+      ? payload
+      : payload?.data?.external_id || payload?.data?.externalId
+      ? payload.data
+      : null);
 
   const isSignedEvent =
     eventType === 'doc_signed' ||
@@ -828,7 +837,9 @@ export const zapSignWebhookHandler = async (req: Request, res: Response) => {
 
   if (!isSignedEvent || !docPayload) {
     console.log(
-      `[ZapSign][webhook] evento ignorado. type=${eventType || 'desconhecido'}`,
+      `[ZapSign][webhook] evento ignorado. type=${
+        eventType || 'desconhecido'
+      } hasDoc=${Boolean(docPayload)}`,
     );
     return res.sendStatus(200);
   }
