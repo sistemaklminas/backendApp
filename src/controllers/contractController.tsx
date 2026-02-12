@@ -26,6 +26,11 @@ const ZAPSIGN_API_TOKEN =
     : process.env.ZAPSIGN_API_TOKEN_PRODUCTION) ||
   process.env.VITE_ZAPSIGN_API_TOKEN;
 
+const ZAPSIGN_PARENT_SIGNATURE_ANCHOR =
+  process.env.ZAPSIGN_PARENT_SIGNATURE_ANCHOR || '<<signer_parent>>';
+const ZAPSIGN_SCHOOL_SIGNATURE_ANCHOR =
+  process.env.ZAPSIGN_SCHOOL_SIGNATURE_ANCHOR || '<<signer_school>>';
+
 const getZapSignHeaders = () => {
   if (!ZAPSIGN_API_TOKEN) {
     throw new Error('ZAPSIGN_API_TOKEN não configurado no backend.');
@@ -215,6 +220,7 @@ export const sendContractForSignature = async (req: Request, res: Response) => {
             phone_country: '55',
             phone_number: signerPhone,
             auth_mode: 'assinatura_tela',
+            signature_placement: ZAPSIGN_PARENT_SIGNATURE_ANCHOR,
             position_x: '20',
             position_y: '85',
             position_page: -1,
@@ -382,6 +388,7 @@ export const sendAddendumForSignature = async (req: Request, res: Response) => {
             phone_country: '55',
             phone_number: signerPhone,
             auth_mode: 'assinatura_tela',
+            signature_placement: ZAPSIGN_PARENT_SIGNATURE_ANCHOR,
             position_x: '20',
             position_y: '85',
             position_page: -1,

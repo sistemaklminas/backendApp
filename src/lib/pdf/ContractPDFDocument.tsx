@@ -88,6 +88,11 @@ const styles = StyleSheet.create({
     margin: '0 auto',
     paddingTop: 4,
   },
+  anchor: {
+    fontSize: 7,
+    color: '#666',
+    marginTop: 2,
+  },
 });
 
 // --- COMPONENTE PDF ATUALIZADO ---
@@ -181,12 +186,14 @@ export function ContractPDFDocument({ data }: ContractPDFDocumentProps) {
                   <View style={styles.signatureBlock}>
                     <View style={styles.signatureLine}>
                       <Text style={styles.bold}>{resp.name.toUpperCase()}</Text>
+                      <Text style={styles.anchor}>{'<<signer_parent>>'}</Text>
                       <Text>Contratante (CPF: {resp.document})</Text>
                     </View>
                   </View>
                   <View style={styles.signatureBlock}>
                     <View style={styles.signatureLine}>
                       <Text style={styles.bold}>KL Minas Esportes LTDA</Text>
+                      <Text style={styles.anchor}>{'<<signer_school>>'}</Text>
                       <Text>Contratada (CNPJ 13.839.322/0001-70)</Text>
                     </View>
                   </View>
