@@ -8,6 +8,8 @@ import {
   StyleSheet,
   Font,
 } from '@react-pdf/renderer';
+import fs from 'node:fs';
+import path from 'node:path';
 // --- IMPORTE OS NOVOS TIPOS E COMPONENTES ---
 import type { ContractSessionData } from '../../types';
 import { getContractContent } from './contractContent';
@@ -18,21 +20,39 @@ interface ContractPDFDocumentProps {
   data: ContractSessionData;
 }
 
-// --- REGISTRO DE FONTES (MUITO IMPORTANTE PARA O PDF) ---
-// Se ainda não tiver, adicione. Se já tiver, verifique se está correto.
-// Baixe as fontes do Google Fonts (Arial) e coloque na pasta /public/fonts
-Font.register({
-  family: 'Arial',
-  fonts: [
-    { src: '/fonts/arial.ttf' },
-    { src: '/fonts/arial-bold.ttf', fontWeight: 'bold' },
-  ],
-});
+const resolveFontPath = (filename: string): string | null => {
+  const candidates = [
+    path.resolve(process.cwd(), '../public/fonts', filename),
+    path.resolve(process.cwd(), 'public/fonts', filename),
+    path.resolve(__dirname, '../../../../public/fonts', filename),
+    path.resolve(__dirname, '../../../public/fonts', filename),
+  ];
+  const found = candidates.find((candidate) => fs.existsSync(candidate));
+  return found || null;
+};
+
+const arialRegular = resolveFontPath('arial.ttf');
+const arialBold = resolveFontPath('arial-bold.ttf');
+const PDF_FONT_FAMILY = arialRegular && arialBold ? 'Arial' : 'Helvetica';
+
+if (arialRegular && arialBold) {
+  Font.register({
+    family: 'Arial',
+    fonts: [
+      { src: arialRegular },
+      { src: arialBold, fontWeight: 'bold' },
+    ],
+  });
+} else {
+  console.warn(
+    '[ContractPDFDocument] Fontes Arial não encontradas. Usando Helvetica como fallback.',
+  );
+}
 
 // --- ESTILOS PARA O PDF ---
 const styles = StyleSheet.create({
   page: {
-    fontFamily: 'Arial',
+    fontFamily: PDF_FONT_FAMILY,
     fontSize: 10,
     padding: '40px 50px',
     lineHeight: 1.5,

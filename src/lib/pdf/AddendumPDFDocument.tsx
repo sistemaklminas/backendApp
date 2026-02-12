@@ -6,6 +6,8 @@ import {
   StyleSheet,
   Font,
 } from '@react-pdf/renderer';
+import fs from 'node:fs';
+import path from 'node:path';
 import type { AddendumSessionData } from '../../types';
 import { getAddendumContent } from './addendumContent';
 import { formatCurrency } from '../firestoreApi';
@@ -14,17 +16,38 @@ interface AddendumPDFDocumentProps {
   data: AddendumSessionData;
 }
 
-Font.register({
-  family: 'Arial',
-  fonts: [
-    { src: '/fonts/arial.ttf' },
-    { src: '/fonts/arial-bold.ttf', fontWeight: 'bold' },
-  ],
-});
+const resolveFontPath = (filename: string): string | null => {
+  const candidates = [
+    path.resolve(process.cwd(), '../public/fonts', filename),
+    path.resolve(process.cwd(), 'public/fonts', filename),
+    path.resolve(__dirname, '../../../../public/fonts', filename),
+    path.resolve(__dirname, '../../../public/fonts', filename),
+  ];
+  const found = candidates.find((candidate) => fs.existsSync(candidate));
+  return found || null;
+};
+
+const arialRegular = resolveFontPath('arial.ttf');
+const arialBold = resolveFontPath('arial-bold.ttf');
+const PDF_FONT_FAMILY = arialRegular && arialBold ? 'Arial' : 'Helvetica';
+
+if (arialRegular && arialBold) {
+  Font.register({
+    family: 'Arial',
+    fonts: [
+      { src: arialRegular },
+      { src: arialBold, fontWeight: 'bold' },
+    ],
+  });
+} else {
+  console.warn(
+    '[AddendumPDFDocument] Fontes Arial não encontradas. Usando Helvetica como fallback.',
+  );
+}
 
 const styles = StyleSheet.create({
   page: {
-    fontFamily: 'Arial',
+    fontFamily: PDF_FONT_FAMILY,
     fontSize: 10,
     padding: '40px 50px',
     lineHeight: 1.5,
