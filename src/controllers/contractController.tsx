@@ -11,8 +11,20 @@ import { getContractSessionData, getAddendumSessionData } from '../lib/firestore
 import { db } from '../lib/firebaseAdmin';
 import { Contract, ContractAddendum, ContractSessionData, AddendumSessionData } from '../types'; // <<< Importar o tipo
 
-const ZAPSIGN_BASE_URL = 'https://api.zapsign.com.br/api/v1';
-const ZAPSIGN_API_TOKEN = process.env.ZAPSIGN_API_TOKEN || process.env.VITE_ZAPSIGN_API_TOKEN;
+const ZAPSIGN_ENV = String(
+  process.env.ZAPSIGN_ENV || process.env.ZAPSIGN_MODE || 'production'
+).toLowerCase();
+const ZAPSIGN_BASE_URL =
+  process.env.ZAPSIGN_API_BASE_URL ||
+  (ZAPSIGN_ENV === 'sandbox'
+    ? 'https://sandbox.api.zapsign.com.br/api/v1'
+    : 'https://api.zapsign.com.br/api/v1');
+const ZAPSIGN_API_TOKEN =
+  process.env.ZAPSIGN_API_TOKEN ||
+  (ZAPSIGN_ENV === 'sandbox'
+    ? process.env.ZAPSIGN_API_TOKEN_SANDBOX
+    : process.env.ZAPSIGN_API_TOKEN_PRODUCTION) ||
+  process.env.VITE_ZAPSIGN_API_TOKEN;
 
 const getZapSignHeaders = () => {
   if (!ZAPSIGN_API_TOKEN) {
