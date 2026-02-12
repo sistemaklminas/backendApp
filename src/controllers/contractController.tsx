@@ -26,10 +26,23 @@ const ZAPSIGN_API_TOKEN =
     : process.env.ZAPSIGN_API_TOKEN_PRODUCTION) ||
   process.env.VITE_ZAPSIGN_API_TOKEN;
 
+const normalizePhone = (value: string | undefined | null) =>
+  String(value || '').replace(/\D/g, '');
+
 const ZAPSIGN_PARENT_SIGNATURE_ANCHOR =
   process.env.ZAPSIGN_PARENT_SIGNATURE_ANCHOR || '<<signer_parent>>';
 const ZAPSIGN_SCHOOL_SIGNATURE_ANCHOR =
   process.env.ZAPSIGN_SCHOOL_SIGNATURE_ANCHOR || '<<signer_school>>';
+const ZAPSIGN_SCHOOL_AS_SIGNER =
+  String(process.env.ZAPSIGN_SCHOOL_AS_SIGNER || 'false').toLowerCase() ===
+  'true';
+const ZAPSIGN_SCHOOL_SIGNER_NAME =
+  process.env.ZAPSIGN_SCHOOL_SIGNER_NAME || 'KL Minas Esportes LTDA';
+const ZAPSIGN_SCHOOL_SIGNER_EMAIL =
+  process.env.ZAPSIGN_SCHOOL_SIGNER_EMAIL || '';
+const ZAPSIGN_SCHOOL_SIGNER_PHONE = normalizePhone(
+  process.env.ZAPSIGN_SCHOOL_SIGNER_PHONE || '',
+);
 
 const getZapSignHeaders = () => {
   if (!ZAPSIGN_API_TOKEN) {
@@ -39,9 +52,6 @@ const getZapSignHeaders = () => {
     Authorization: `Bearer ${ZAPSIGN_API_TOKEN}`,
   };
 };
-
-const normalizePhone = (value: string | undefined | null) =>
-  String(value || '').replace(/\D/g, '');
 
 const getResponsiblePhoneDigits = (responsible: any): string => {
   const candidates: Array<string | undefined | null> = [
@@ -120,6 +130,59 @@ const extractSignerUrl = (
 
   const firstWithUrl = signers.find((s: any) => Boolean(s?.sign_url));
   return firstWithUrl?.sign_url ? String(firstWithUrl.sign_url) : null;
+};
+
+const buildSignerPayload = (
+  responsible: any,
+  signerPhone: string,
+  initiator: 'ADMIN' | 'PARENT',
+  redirectAfterSign: string,
+) => {
+  const signers: any[] = [
+    {
+      name: responsible.name,
+      email: responsible.email,
+      phone_country: '55',
+      phone_number: signerPhone,
+      auth_mode: 'assinatura_tela',
+      signature_placement: ZAPSIGN_PARENT_SIGNATURE_ANCHOR,
+      position_x: '20',
+      position_y: '85',
+      position_page: -1,
+      redirect_after_sign: redirectAfterSign,
+      get_sign_url: initiator === 'PARENT',
+    },
+  ];
+
+  // Modo opcional: escola como signatário explícito para aparecer como 2/2.
+  // Exige ação de assinatura da escola no fluxo atual da ZapSign.
+  if (ZAPSIGN_SCHOOL_AS_SIGNER && ZAPSIGN_SCHOOL_SIGNER_EMAIL) {
+    signers.push({
+      name: ZAPSIGN_SCHOOL_SIGNER_NAME,
+      email: ZAPSIGN_SCHOOL_SIGNER_EMAIL,
+      phone_country: '55',
+      phone_number: ZAPSIGN_SCHOOL_SIGNER_PHONE || undefined,
+      auth_mode: 'assinatura_tela',
+      signature_placement: ZAPSIGN_SCHOOL_SIGNATURE_ANCHOR,
+      position_x: '65',
+      position_y: '85',
+      position_page: -1,
+      get_sign_url: false,
+      send_automatic_email: false,
+    });
+  }
+
+  return {
+    signers,
+    auto_sign: ZAPSIGN_SCHOOL_AS_SIGNER
+      ? undefined
+      : {
+          enabled: true,
+          position_x: '65',
+          position_y: '85',
+          position_page: -1,
+        },
+  };
 };
 
 // --- FUNÇÃO HELPER ATUALIZADA ---
@@ -203,31 +266,19 @@ export const sendContractForSignature = async (req: Request, res: Response) => {
         );
       }
 
+      const signerConfig = buildSignerPayload(
+        contractData.financialResponsible,
+        signerPhone,
+        initiator,
+        `${process.env.FRONTEND_URL}/assinatura-sucesso?contractId=${contractId}`,
+      );
+
       const zapSignPayload = {
         external_id: contractId,
         name: `Contrato KL Minas - ${contractData.financialResponsible.name}`,
         base64_pdf: base64Pdf, // <<< CORRIGIDO: Adicionando o PDF ao payload
-        auto_sign: {
-          enabled: true,
-          position_x: '65',
-          position_y: '85',
-          position_page: -1,
-        },
-        signers: [
-          {
-            name: contractData.financialResponsible.name,
-            email: contractData.financialResponsible.email,
-            phone_country: '55',
-            phone_number: signerPhone,
-            auth_mode: 'assinatura_tela',
-            signature_placement: ZAPSIGN_PARENT_SIGNATURE_ANCHOR,
-            position_x: '20',
-            position_y: '85',
-            position_page: -1,
-            redirect_after_sign: `${process.env.FRONTEND_URL}/assinatura-sucesso?contractId=${contractId}`,
-            get_sign_url: initiator === 'PARENT',
-          },
-        ],
+        auto_sign: signerConfig.auto_sign,
+        signers: signerConfig.signers,
       };
 
       const response = await axios.post(
@@ -371,31 +422,19 @@ export const sendAddendumForSignature = async (req: Request, res: Response) => {
         );
       }
 
+      const signerConfig = buildSignerPayload(
+        addendumData.financialResponsible,
+        signerPhone,
+        initiator,
+        `${process.env.FRONTEND_URL}/assinatura-sucesso?addendumId=${addendumId}`,
+      );
+
       const zapSignPayload = {
         external_id: `addendum:${addendumId}`,
         name: `Aditivo KL Minas - ${addendumData.financialResponsible.name}`,
         base64_pdf: base64Pdf,
-        auto_sign: {
-          enabled: true,
-          position_x: '65',
-          position_y: '85',
-          position_page: -1,
-        },
-        signers: [
-          {
-            name: addendumData.financialResponsible.name,
-            email: addendumData.financialResponsible.email,
-            phone_country: '55',
-            phone_number: signerPhone,
-            auth_mode: 'assinatura_tela',
-            signature_placement: ZAPSIGN_PARENT_SIGNATURE_ANCHOR,
-            position_x: '20',
-            position_y: '85',
-            position_page: -1,
-            redirect_after_sign: `${process.env.FRONTEND_URL}/assinatura-sucesso?addendumId=${addendumId}`,
-            get_sign_url: initiator === 'PARENT',
-          },
-        ],
+        auto_sign: signerConfig.auto_sign,
+        signers: signerConfig.signers,
       };
 
       const response = await axios.post(
