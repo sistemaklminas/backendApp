@@ -81,9 +81,23 @@ export async function getContractSessionData(contractId: string): Promise<Contra
         throw new Error('Nenhuma inscrição ativa encontrada para gerar o contrato.');
     }
 
-    const courseIds = [...new Set(
+    const classIds = [...new Set(
         allSubscriptions
-            .map(sub => sub.courseId)
+            .map(sub => sub.classId)
+            .filter((id): id is string => typeof id === 'string' && id.trim().length > 0)
+    )];
+    if (classIds.length === 0) {
+        throw new Error('Nenhuma turma válida encontrada para gerar o contrato.');
+    }
+
+    const classesQuery = await db.collection('classes')
+        .where(admin.firestore.FieldPath.documentId(), 'in', classIds)
+        .get();
+    const classesMap = new Map(classesQuery.docs.map(d => [d.id, d.data() as { courseId?: string }]));
+
+    const courseIds = [...new Set(
+        Array.from(classesMap.values())
+            .map(cls => cls?.courseId)
             .filter((id): id is string => typeof id === 'string' && id.trim().length > 0)
     )];
     if (courseIds.length === 0) {
@@ -101,7 +115,9 @@ export async function getContractSessionData(contractId: string): Promise<Contra
         totalAppliedPrice += sub.finalPrice;
 
         const student = studentsMap.get(sub.studentId);
-        const course = coursesMap.get(sub.courseId);
+        const courseIdFromClass = classesMap.get(sub.classId)?.courseId;
+        const courseId = sub.courseId || courseIdFromClass;
+        const course = courseId ? coursesMap.get(courseId) : null;
 
         let discountReason = '-';
         if (sub.discounts.hasFamilyDiscount) discountReason = 'Desconto Familiar';
