@@ -35,8 +35,15 @@ export async function getContractSessionData(contractId: string): Promise<Contra
     if (!responsibleSnap.exists) throw new Error('Responsável financeiro não encontrado.');
     const financialResponsible = responsibleSnap.data() as FinancialResponsible;
 
+    const validContractStudentIds = (contract.studentIds || [])
+        .filter((id): id is string => typeof id === 'string' && id.trim().length > 0);
+
+    if (validContractStudentIds.length === 0) {
+        throw new Error('Contrato sem alunos válidos para gerar documento.');
+    }
+
     const subscriptionsQuery = await db.collection('subscriptions')
-        .where('studentId', 'in', contract.studentIds)
+        .where('studentId', 'in', validContractStudentIds)
         .where('year', '==', contract.year)
         .where('isActive', '==', true)
         .get();
@@ -46,7 +53,15 @@ export async function getContractSessionData(contractId: string): Promise<Contra
         throw new Error('Nenhuma inscrição ativa encontrada para gerar o contrato.');
     }
 
-    const subscriptionStudentIds = [...new Set(allSubscriptions.map(sub => sub.studentId))];
+    const subscriptionStudentIds = [...new Set(
+        allSubscriptions
+            .map(sub => sub.studentId)
+            .filter((id): id is string => typeof id === 'string' && id.trim().length > 0)
+    )];
+
+    if (subscriptionStudentIds.length === 0) {
+        throw new Error('Nenhum aluno válido encontrado nas inscrições para gerar o contrato.');
+    }
     const studentsQuery = await db.collection('students')
         .where(admin.firestore.FieldPath.documentId(), 'in', subscriptionStudentIds)
         .get();
@@ -66,7 +81,14 @@ export async function getContractSessionData(contractId: string): Promise<Contra
         throw new Error('Nenhuma inscrição ativa encontrada para gerar o contrato.');
     }
 
-    const courseIds = [...new Set(allSubscriptions.map(sub => sub.courseId))];
+    const courseIds = [...new Set(
+        allSubscriptions
+            .map(sub => sub.courseId)
+            .filter((id): id is string => typeof id === 'string' && id.trim().length > 0)
+    )];
+    if (courseIds.length === 0) {
+        throw new Error('Nenhum curso válido encontrado para gerar o contrato.');
+    }
     const coursesQuery = await db.collection('courses').where(admin.firestore.FieldPath.documentId(), 'in', courseIds).get();
     const coursesMap = new Map(coursesQuery.docs.map(d => [d.id, d.data() as Course]));
 
