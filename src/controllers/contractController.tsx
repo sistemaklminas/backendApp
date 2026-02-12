@@ -43,6 +43,9 @@ const ZAPSIGN_SCHOOL_SIGNER_EMAIL =
 const ZAPSIGN_SCHOOL_SIGNER_PHONE = normalizePhone(
   process.env.ZAPSIGN_SCHOOL_SIGNER_PHONE || '',
 );
+const ZAPSIGN_DEBUG_LOG_FULL_TOKEN =
+  String(process.env.ZAPSIGN_DEBUG_LOG_FULL_TOKEN || 'false').toLowerCase() ===
+  'true';
 
 const getZapSignHeaders = () => {
   if (!ZAPSIGN_API_TOKEN) {
@@ -51,6 +54,24 @@ const getZapSignHeaders = () => {
   return {
     Authorization: `Bearer ${ZAPSIGN_API_TOKEN}`,
   };
+};
+
+const getSafeTokenForLog = () => {
+  if (!ZAPSIGN_API_TOKEN) return 'TOKEN_AUSENTE';
+  if (ZAPSIGN_DEBUG_LOG_FULL_TOKEN) return ZAPSIGN_API_TOKEN;
+  if (ZAPSIGN_API_TOKEN.length <= 12) return ZAPSIGN_API_TOKEN;
+  return `${ZAPSIGN_API_TOKEN.slice(0, 6)}...${ZAPSIGN_API_TOKEN.slice(-4)}`;
+};
+
+const logZapSignRuntime = (scope: 'contract' | 'addendum', id: string) => {
+  console.log(
+    `[ZapSign][${scope}:${id}] env=${ZAPSIGN_ENV} base=${ZAPSIGN_BASE_URL} token=${getSafeTokenForLog()} mode=${
+      ZAPSIGN_SCHOOL_AS_SIGNER ? 'school_as_signer' : 'auto_sign'
+    }`,
+  );
+  console.log(
+    `[ZapSign][${scope}:${id}] conferir token em: ZapSign > Configurações > Integrações > API ZapSign (mesmo ambiente: sandbox/producao).`,
+  );
 };
 
 const getResponsiblePhoneDigits = (responsible: any): string => {
@@ -232,6 +253,7 @@ export const sendContractForSignature = async (req: Request, res: Response) => {
   }
 
   try {
+    logZapSignRuntime('contract', contractId);
     // --- PASSO 1: BUSCAR O CONTRATO E SEU STATUS ATUAL ---
     const contractRef = db.collection('contracts').doc(contractId);
     const contractDoc = await contractRef.get();
@@ -393,6 +415,7 @@ export const sendAddendumForSignature = async (req: Request, res: Response) => {
   }
 
   try {
+    logZapSignRuntime('addendum', addendumId);
     const addendumRef = db.collection('contractAddendums').doc(addendumId);
     const addendumDoc = await addendumRef.get();
     if (!addendumDoc.exists) {
