@@ -734,44 +734,78 @@ export const getAddendumSignedFile = async (req: Request, res: Response) => {
 };
 
 export const zapSignWebhookHandler = async (req: Request, res: Response) => {
-  const event = req.body;
+  const payload = req.body || {};
 
   // É uma boa prática verificar se a requisição veio mesmo do ZapSign,
   // mas por simplicidade vamos pular essa parte por enquanto.
 
-  if (event.event.type === 'doc_signed') {
-    const externalId: string = event.doc.external_id;
+  const eventTypeRaw =
+    payload?.event?.type ||
+    payload?.event_type ||
+    payload?.type ||
+    '';
+  const eventType = String(eventTypeRaw).toLowerCase();
+  const docPayload =
+    payload?.doc ||
+    payload?.document ||
+    payload?.event?.doc ||
+    payload?.data?.doc ||
+    null;
 
-    try {
-      if (externalId.startsWith('addendum:')) {
-        const addendumId = externalId.replace('addendum:', '');
-        const addendumRef = db.collection('contractAddendums').doc(addendumId);
-        await addendumRef.update({
-          status: 'signed',
-          provider: 'ZapSign',
-          providerToken: event?.doc?.token || null,
-          signedFileUrl: event?.doc?.signed_file || null,
-          signedAt: new Date(),
-        });
-        console.log(`Aditivo ${addendumId} atualizado para 'signed'.`);
-      } else {
-        const contractId = externalId;
-        const contractRef = db.collection('contracts').doc(contractId);
-        await contractRef.update({
-          status: 'signed',
-          provider: 'ZapSign',
-          providerToken: event?.doc?.token || null,
-          signedFileUrl: event?.doc?.signed_file || null,
-          signedAt: new Date(),
-        });
-        console.log(`Contrato ${contractId} atualizado para 'signed'.`);
-      }
-    } catch (error) {
-      console.error(
-        `Erro ao atualizar documento via webhook:`,
-        error,
-      );
+  const isSignedEvent =
+    eventType === 'doc_signed' ||
+    eventType === 'document_signed' ||
+    eventType === 'document.signed';
+
+  if (!isSignedEvent || !docPayload) {
+    console.log(
+      `[ZapSign][webhook] evento ignorado. type=${eventType || 'desconhecido'}`,
+    );
+    return res.sendStatus(200);
+  }
+
+  const externalId: string = String(
+    docPayload?.external_id || docPayload?.externalId || '',
+  );
+  if (!externalId) {
+    console.warn('[ZapSign][webhook] external_id ausente no payload.');
+    return res.sendStatus(200);
+  }
+
+  try {
+    const providerToken =
+      docPayload?.token || docPayload?.doc_token || docPayload?.id || null;
+    const signedFileUrl =
+      docPayload?.signed_file ||
+      docPayload?.signed_file_url ||
+      docPayload?.download_url ||
+      null;
+
+    if (externalId.startsWith('addendum:')) {
+      const addendumId = externalId.replace('addendum:', '');
+      const addendumRef = db.collection('contractAddendums').doc(addendumId);
+      await addendumRef.update({
+        status: 'signed',
+        provider: 'ZapSign',
+        providerToken,
+        signedFileUrl,
+        signedAt: new Date(),
+      });
+      console.log(`Aditivo ${addendumId} atualizado para 'signed'.`);
+    } else {
+      const contractId = externalId;
+      const contractRef = db.collection('contracts').doc(contractId);
+      await contractRef.update({
+        status: 'signed',
+        provider: 'ZapSign',
+        providerToken,
+        signedFileUrl,
+        signedAt: new Date(),
+      });
+      console.log(`Contrato ${contractId} atualizado para 'signed'.`);
     }
+  } catch (error) {
+    console.error(`Erro ao atualizar documento via webhook:`, error);
   }
 
   // Responda ao ZapSign com status 200 para confirmar o recebimento.
