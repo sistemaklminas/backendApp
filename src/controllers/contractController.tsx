@@ -11,6 +11,51 @@ import { getContractSessionData, getAddendumSessionData } from '../lib/firestore
 import { db } from '../lib/firebaseAdmin';
 import { Contract, ContractAddendum, ContractSessionData, AddendumSessionData } from '../types'; // <<< Importar o tipo
 
+const ZAPSIGN_BASE_URL = 'https://api.zapsign.com.br/api/v1';
+const ZAPSIGN_API_TOKEN = process.env.ZAPSIGN_API_TOKEN || process.env.VITE_ZAPSIGN_API_TOKEN;
+
+const getZapSignHeaders = () => {
+  if (!ZAPSIGN_API_TOKEN) {
+    throw new Error('ZAPSIGN_API_TOKEN não configurado no backend.');
+  }
+  return {
+    Authorization: `Bearer ${ZAPSIGN_API_TOKEN}`,
+  };
+};
+
+const normalizePhone = (value: string | undefined | null) =>
+  String(value || '').replace(/\D/g, '');
+
+const getUserProfileByUid = async (uid: string) => {
+  const docSnap = await db.collection('userProfiles').doc(uid).get();
+  return docSnap.exists ? docSnap.data() as { role?: string; document?: string } : null;
+};
+
+const canManageContractsByRole = (role?: string) =>
+  role === 'root' || role === 'admin' || role === 'editor' || role === 'coordinator';
+
+const canUserAccessResponsible = async (uid: string, financialResponsibleId: string): Promise<boolean> => {
+  const profile = await getUserProfileByUid(uid);
+  if (!profile) return false;
+  if (canManageContractsByRole(profile.role)) return true;
+
+  if (profile.role !== 'user') return false;
+  const responsibleSnap = await db.collection('financialResponsibles').doc(financialResponsibleId).get();
+  if (!responsibleSnap.exists) return false;
+  const responsible = responsibleSnap.data() as { document?: string };
+  const userDocument = String(profile.document || '').replace(/\D/g, '');
+  const responsibleDocument = String(responsible.document || '').replace(/\D/g, '');
+  return Boolean(userDocument && responsibleDocument && userDocument === responsibleDocument);
+};
+
+const getSignedFileUrlFromZapSign = async (docToken: string): Promise<string | null> => {
+  const response = await axios.get(
+    `${ZAPSIGN_BASE_URL}/docs/${docToken}`,
+    { headers: getZapSignHeaders() }
+  );
+  return response.data?.signed_file || null;
+};
+
 // --- FUNÇÃO HELPER ATUALIZADA ---
 // Agora usa renderToStream e o tipo correto para contractData
 const generatePdfAsBase64 = async (
@@ -114,12 +159,10 @@ export const sendContractForSignature = async (req: Request, res: Response) => {
       };
 
       const response = await axios.post(
-        'https://api.zapsign.com.br/api/v1/docs/',
+        `${ZAPSIGN_BASE_URL}/docs/`,
         zapSignPayload,
         {
-          headers: {
-            Authorization: `Bearer ${process.env.VITE_ZAPSIGN_API_TOKEN}`,
-          },
+          headers: getZapSignHeaders(),
         },
       );
       const zapSignDocToken = response.data.token;
@@ -153,12 +196,10 @@ export const sendContractForSignature = async (req: Request, res: Response) => {
         // A API do ZapSign tem um endpoint para reenviar notificações.
         // POST /api/v1/docs/{token}/resend-email-or-sms
         await axios.post(
-          `https://api.zapsign.com.br/api/v1/docs/${contract.zapSignToken}/resend-email-or-sms`,
+          `${ZAPSIGN_BASE_URL}/docs/${contract.zapSignToken}/resend-email-or-sms`,
           {},
           {
-            headers: {
-              Authorization: `Bearer ${process.env.VITE_ZAPSIGN_API_TOKEN}`,
-            },
+            headers: getZapSignHeaders(),
           },
         );
         return res
@@ -171,11 +212,9 @@ export const sendContractForSignature = async (req: Request, res: Response) => {
         // A API do ZapSign permite buscar os dados de um documento, incluindo as URLs de assinatura.
         // GET /api/v1/docs/{token}
         const response = await axios.get(
-          `https://api.zapsign.com.br/api/v1/docs/${contract.zapSignToken}`,
+          `${ZAPSIGN_BASE_URL}/docs/${contract.zapSignToken}`,
           {
-            headers: {
-              Authorization: `Bearer ${process.env.VITE_ZAPSIGN_API_TOKEN}`,
-            },
+            headers: getZapSignHeaders(),
           },
         );
         const signUrl = response.data.signers[0].sign_url; // Encontra a URL do signatário (pai)
@@ -256,12 +295,10 @@ export const sendAddendumForSignature = async (req: Request, res: Response) => {
       };
 
       const response = await axios.post(
-        'https://api.zapsign.com.br/api/v1/docs/',
+        `${ZAPSIGN_BASE_URL}/docs/`,
         zapSignPayload,
         {
-          headers: {
-            Authorization: `Bearer ${process.env.VITE_ZAPSIGN_API_TOKEN}`,
-          },
+          headers: getZapSignHeaders(),
         },
       );
       const zapSignDocToken = response.data.token;
@@ -291,12 +328,10 @@ export const sendAddendumForSignature = async (req: Request, res: Response) => {
 
       if (initiator === 'ADMIN') {
         await axios.post(
-          `https://api.zapsign.com.br/api/v1/docs/${addendum.zapSignToken}/resend-email-or-sms`,
+          `${ZAPSIGN_BASE_URL}/docs/${addendum.zapSignToken}/resend-email-or-sms`,
           {},
           {
-            headers: {
-              Authorization: `Bearer ${process.env.VITE_ZAPSIGN_API_TOKEN}`,
-            },
+            headers: getZapSignHeaders(),
           },
         );
         return res
@@ -306,11 +341,9 @@ export const sendAddendumForSignature = async (req: Request, res: Response) => {
 
       if (initiator === 'PARENT') {
         const response = await axios.get(
-          `https://api.zapsign.com.br/api/v1/docs/${addendum.zapSignToken}`,
+          `${ZAPSIGN_BASE_URL}/docs/${addendum.zapSignToken}`,
           {
-            headers: {
-              Authorization: `Bearer ${process.env.VITE_ZAPSIGN_API_TOKEN}`,
-            },
+            headers: getZapSignHeaders(),
           },
         );
         const signUrl = response.data.signers[0].sign_url;
@@ -325,6 +358,255 @@ export const sendAddendumForSignature = async (req: Request, res: Response) => {
       error.response?.data || error.message,
     );
     return res.status(500).json({ error: 'Falha ao processar o aditivo.' });
+  }
+};
+
+const createZapSignDocumentFromUploadedPdf = async ({
+  externalId,
+  name,
+  pdfBuffer,
+}: {
+  externalId: string;
+  name: string;
+  pdfBuffer: Buffer;
+}) => {
+  const payload = {
+    external_id: externalId,
+    name,
+    base64_pdf: pdfBuffer.toString('base64'),
+    auto_sign: {
+      enabled: true,
+      position_x: '65',
+      position_y: '85',
+      position_page: -1,
+    },
+    signers: [],
+  };
+
+  const response = await axios.post(
+    `${ZAPSIGN_BASE_URL}/docs/`,
+    payload,
+    { headers: getZapSignHeaders() },
+  );
+
+  return {
+    token: response.data?.token as string | undefined,
+  };
+};
+
+export const uploadSignedContractFile = async (req: Request, res: Response) => {
+  const { contractId } = req.body;
+  const file = (req as any).file as Express.Multer.File | undefined;
+  const requesterUid = req.user?.uid;
+
+  if (!requesterUid) {
+    return res.status(401).json({ error: 'Usuário não autenticado.' });
+  }
+  if (!contractId || !file) {
+    return res.status(400).json({ error: 'contractId e arquivo PDF são obrigatórios.' });
+  }
+
+  try {
+    const contractRef = db.collection('contracts').doc(contractId);
+    const contractSnap = await contractRef.get();
+    if (!contractSnap.exists) {
+      return res.status(404).json({ error: 'Contrato não encontrado.' });
+    }
+    const contract = contractSnap.data() as Contract;
+
+    const canAccess = await canUserAccessResponsible(requesterUid, contract.financialResponsibleId);
+    if (!canAccess) {
+      return res.status(403).json({ error: 'Você não tem permissão para este contrato.' });
+    }
+    if (contract.status === 'signed') {
+      return res.status(409).json({ error: 'Contrato já assinado. Não é permitido sobrescrever.' });
+    }
+    if (contract.zapSignToken) {
+      return res.status(409).json({ error: 'Contrato já enviado para assinatura. Upload bloqueado para evitar sobrescrita.' });
+    }
+
+    const responsibleSnap = await db
+      .collection('financialResponsibles')
+      .doc(contract.financialResponsibleId)
+      .get();
+    const responsible = responsibleSnap.exists
+      ? (responsibleSnap.data() as { name?: string })
+      : { name: 'Responsável' };
+
+    const created = await createZapSignDocumentFromUploadedPdf({
+      externalId: contractId,
+      name: `Contrato Assinado (Upload) - ${responsible.name || contractId}`,
+      pdfBuffer: file.buffer,
+    });
+
+    if (!created.token) {
+      return res.status(500).json({ error: 'ZapSign não retornou token do documento.' });
+    }
+
+    await contractRef.update({
+      status: 'sent_to_signature',
+      provider: 'ZapSign',
+      zapSignToken: created.token,
+      providerToken: created.token,
+      sentToSignatureAt: new Date(),
+      uploadSource: 'manual_signed_upload',
+      uploadSignedFileName: file.originalname,
+      uploadSignedBy: requesterUid,
+      uploadSignedAt: new Date(),
+    } as any);
+
+    return res.status(200).json({
+      success: true,
+      message: 'Arquivo enviado para armazenamento e assinatura automática na ZapSign.',
+    });
+  } catch (error: any) {
+    console.error('Erro no upload assinado de contrato:', error.response?.data || error.message);
+    return res.status(500).json({ error: 'Falha ao enviar arquivo assinado do contrato.' });
+  }
+};
+
+export const uploadSignedAddendumFile = async (req: Request, res: Response) => {
+  const { addendumId } = req.body;
+  const file = (req as any).file as Express.Multer.File | undefined;
+  const requesterUid = req.user?.uid;
+
+  if (!requesterUid) {
+    return res.status(401).json({ error: 'Usuário não autenticado.' });
+  }
+  if (!addendumId || !file) {
+    return res.status(400).json({ error: 'addendumId e arquivo PDF são obrigatórios.' });
+  }
+
+  try {
+    const addendumRef = db.collection('contractAddendums').doc(addendumId);
+    const addendumSnap = await addendumRef.get();
+    if (!addendumSnap.exists) {
+      return res.status(404).json({ error: 'Aditivo não encontrado.' });
+    }
+    const addendum = addendumSnap.data() as ContractAddendum;
+
+    const canAccess = await canUserAccessResponsible(requesterUid, addendum.financialResponsibleId);
+    if (!canAccess) {
+      return res.status(403).json({ error: 'Você não tem permissão para este aditivo.' });
+    }
+    if (addendum.status === 'signed') {
+      return res.status(409).json({ error: 'Aditivo já assinado. Não é permitido sobrescrever.' });
+    }
+    if (addendum.zapSignToken) {
+      return res.status(409).json({ error: 'Aditivo já enviado para assinatura. Upload bloqueado para evitar sobrescrita.' });
+    }
+
+    const responsibleSnap = await db
+      .collection('financialResponsibles')
+      .doc(addendum.financialResponsibleId)
+      .get();
+    const responsible = responsibleSnap.exists
+      ? (responsibleSnap.data() as { name?: string })
+      : { name: 'Responsável' };
+
+    const created = await createZapSignDocumentFromUploadedPdf({
+      externalId: `addendum:${addendumId}`,
+      name: `Aditivo Assinado (Upload) - ${responsible.name || addendumId}`,
+      pdfBuffer: file.buffer,
+    });
+
+    if (!created.token) {
+      return res.status(500).json({ error: 'ZapSign não retornou token do documento.' });
+    }
+
+    await addendumRef.update({
+      status: 'sent',
+      provider: 'ZapSign',
+      zapSignToken: created.token,
+      providerToken: created.token,
+      sentAt: new Date(),
+      uploadSource: 'manual_signed_upload',
+      uploadSignedFileName: file.originalname,
+      uploadSignedBy: requesterUid,
+      uploadSignedAt: new Date(),
+    } as any);
+
+    return res.status(200).json({
+      success: true,
+      message: 'Arquivo enviado para armazenamento e assinatura automática na ZapSign.',
+    });
+  } catch (error: any) {
+    console.error('Erro no upload assinado de aditivo:', error.response?.data || error.message);
+    return res.status(500).json({ error: 'Falha ao enviar arquivo assinado do aditivo.' });
+  }
+};
+
+export const getContractSignedFile = async (req: Request, res: Response) => {
+  const { contractId } = req.params;
+  const requesterUid = req.user?.uid;
+  if (!requesterUid) return res.status(401).json({ error: 'Usuário não autenticado.' });
+
+  try {
+    const contractRef = db.collection('contracts').doc(contractId);
+    const contractSnap = await contractRef.get();
+    if (!contractSnap.exists) return res.status(404).json({ error: 'Contrato não encontrado.' });
+
+    const contract = contractSnap.data() as Contract;
+    const canAccess = await canUserAccessResponsible(requesterUid, contract.financialResponsibleId);
+    if (!canAccess) return res.status(403).json({ error: 'Sem permissão para este contrato.' });
+
+    if (contract.status !== 'signed') {
+      return res.status(409).json({ error: 'Contrato ainda não está assinado.' });
+    }
+
+    let signedFileUrl = (contract as any).signedFileUrl as string | undefined;
+    if (!signedFileUrl && contract.zapSignToken) {
+      signedFileUrl = await getSignedFileUrlFromZapSign(contract.zapSignToken) || undefined;
+      if (signedFileUrl) {
+        await contractRef.update({ signedFileUrl });
+      }
+    }
+
+    if (!signedFileUrl) {
+      return res.status(404).json({ error: 'Arquivo assinado ainda indisponível na ZapSign.' });
+    }
+
+    return res.status(200).json({ success: true, signedFileUrl });
+  } catch (error: any) {
+    console.error('Erro ao recuperar contrato assinado:', error.response?.data || error.message);
+    return res.status(500).json({ error: 'Falha ao recuperar contrato assinado.' });
+  }
+};
+
+export const getAddendumSignedFile = async (req: Request, res: Response) => {
+  const { addendumId } = req.params;
+  const requesterUid = req.user?.uid;
+  if (!requesterUid) return res.status(401).json({ error: 'Usuário não autenticado.' });
+
+  try {
+    const addendumRef = db.collection('contractAddendums').doc(addendumId);
+    const addendumSnap = await addendumRef.get();
+    if (!addendumSnap.exists) return res.status(404).json({ error: 'Aditivo não encontrado.' });
+
+    const addendum = addendumSnap.data() as ContractAddendum;
+    const canAccess = await canUserAccessResponsible(requesterUid, addendum.financialResponsibleId);
+    if (!canAccess) return res.status(403).json({ error: 'Sem permissão para este aditivo.' });
+
+    if (addendum.status !== 'signed') {
+      return res.status(409).json({ error: 'Aditivo ainda não está assinado.' });
+    }
+
+    let signedFileUrl = (addendum as any).signedFileUrl as string | undefined;
+    if (!signedFileUrl && addendum.zapSignToken) {
+      signedFileUrl = await getSignedFileUrlFromZapSign(addendum.zapSignToken) || undefined;
+      if (signedFileUrl) {
+        await addendumRef.update({ signedFileUrl });
+      }
+    }
+
+    if (!signedFileUrl) {
+      return res.status(404).json({ error: 'Arquivo assinado ainda indisponível na ZapSign.' });
+    }
+
+    return res.status(200).json({ success: true, signedFileUrl });
+  } catch (error: any) {
+    console.error('Erro ao recuperar aditivo assinado:', error.response?.data || error.message);
+    return res.status(500).json({ error: 'Falha ao recuperar aditivo assinado.' });
   }
 };
 
@@ -343,6 +625,9 @@ export const zapSignWebhookHandler = async (req: Request, res: Response) => {
         const addendumRef = db.collection('contractAddendums').doc(addendumId);
         await addendumRef.update({
           status: 'signed',
+          provider: 'ZapSign',
+          providerToken: event?.doc?.token || null,
+          signedFileUrl: event?.doc?.signed_file || null,
           signedAt: new Date(),
         });
         console.log(`Aditivo ${addendumId} atualizado para 'signed'.`);
@@ -351,6 +636,9 @@ export const zapSignWebhookHandler = async (req: Request, res: Response) => {
         const contractRef = db.collection('contracts').doc(contractId);
         await contractRef.update({
           status: 'signed',
+          provider: 'ZapSign',
+          providerToken: event?.doc?.token || null,
+          signedFileUrl: event?.doc?.signed_file || null,
           signedAt: new Date(),
         });
         console.log(`Contrato ${contractId} atualizado para 'signed'.`);
