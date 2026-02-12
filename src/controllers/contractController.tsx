@@ -98,6 +98,25 @@ const getSignedFileUrlFromZapSign = async (docToken: string): Promise<string | n
   return response.data?.signed_file || null;
 };
 
+const extractSignerUrl = (
+  docPayload: any,
+  targetEmail?: string | null,
+): string | null => {
+  const signers = Array.isArray(docPayload?.signers) ? docPayload.signers : [];
+  if (signers.length === 0) return null;
+
+  const email = String(targetEmail || '').trim().toLowerCase();
+  if (email) {
+    const exact = signers.find(
+      (s: any) => String(s?.email || '').trim().toLowerCase() === email,
+    );
+    if (exact?.sign_url) return String(exact.sign_url);
+  }
+
+  const firstWithUrl = signers.find((s: any) => Boolean(s?.sign_url));
+  return firstWithUrl?.sign_url ? String(firstWithUrl.sign_url) : null;
+};
+
 // --- FUNÇÃO HELPER ATUALIZADA ---
 // Agora usa renderToStream e o tipo correto para contractData
 const generatePdfAsBase64 = async (
@@ -213,6 +232,9 @@ export const sendContractForSignature = async (req: Request, res: Response) => {
         },
       );
       const zapSignDocToken = response.data.token;
+      console.log(
+        `[ZapSign][contract:${contractId}] documento criado. token=${zapSignDocToken}`,
+      );
 
       // ATUALIZA O STATUS E SALVA O TOKEN DO ZAPSIGN
       await contractRef.update({
@@ -221,9 +243,27 @@ export const sendContractForSignature = async (req: Request, res: Response) => {
         sentToSignatureAt: new Date(),
       });
 
-      let signUrl = null;
-      if (initiator === 'PARENT' && response.data.signers[0].get_sign_url) {
-        signUrl = response.data.signers[0].sign_url;
+      let signUrl: string | null = null;
+      if (initiator === 'PARENT') {
+        signUrl = extractSignerUrl(
+          response.data,
+          contractData.financialResponsible.email,
+        );
+        if (!signUrl && zapSignDocToken) {
+          const docResponse = await axios.get(
+            `${ZAPSIGN_BASE_URL}/docs/${zapSignDocToken}`,
+            { headers: getZapSignHeaders() },
+          );
+          signUrl = extractSignerUrl(
+            docResponse.data,
+            contractData.financialResponsible.email,
+          );
+        }
+        console.log(
+          `[ZapSign][contract:${contractId}] sign_url ${
+            signUrl ? 'obtida' : 'não encontrada'
+          } para initiator=PARENT`,
+        );
       }
       return res.status(200).json({
         success: true,
@@ -264,7 +304,12 @@ export const sendContractForSignature = async (req: Request, res: Response) => {
             headers: getZapSignHeaders(),
           },
         );
-        const signUrl = response.data.signers[0].sign_url; // Encontra a URL do signatário (pai)
+        const signUrl = extractSignerUrl(response.data);
+        console.log(
+          `[ZapSign][contract:${contractId}] sign_url ${
+            signUrl ? 'obtida' : 'não encontrada'
+          } no fluxo sent_to_signature`,
+        );
         return res.status(200).json({ success: true, sign_url: signUrl });
       }
     }
@@ -354,6 +399,9 @@ export const sendAddendumForSignature = async (req: Request, res: Response) => {
         },
       );
       const zapSignDocToken = response.data.token;
+      console.log(
+        `[ZapSign][addendum:${addendumId}] documento criado. token=${zapSignDocToken}`,
+      );
 
       await addendumRef.update({
         status: 'sent',
@@ -361,9 +409,27 @@ export const sendAddendumForSignature = async (req: Request, res: Response) => {
         sentAt: new Date(),
       });
 
-      let signUrl = null;
-      if (initiator === 'PARENT' && response.data.signers[0].get_sign_url) {
-        signUrl = response.data.signers[0].sign_url;
+      let signUrl: string | null = null;
+      if (initiator === 'PARENT') {
+        signUrl = extractSignerUrl(
+          response.data,
+          addendumData.financialResponsible.email,
+        );
+        if (!signUrl && zapSignDocToken) {
+          const docResponse = await axios.get(
+            `${ZAPSIGN_BASE_URL}/docs/${zapSignDocToken}`,
+            { headers: getZapSignHeaders() },
+          );
+          signUrl = extractSignerUrl(
+            docResponse.data,
+            addendumData.financialResponsible.email,
+          );
+        }
+        console.log(
+          `[ZapSign][addendum:${addendumId}] sign_url ${
+            signUrl ? 'obtida' : 'não encontrada'
+          } para initiator=PARENT`,
+        );
       }
 
       return res.status(200).json({
@@ -398,7 +464,12 @@ export const sendAddendumForSignature = async (req: Request, res: Response) => {
             headers: getZapSignHeaders(),
           },
         );
-        const signUrl = response.data.signers[0].sign_url;
+        const signUrl = extractSignerUrl(response.data);
+        console.log(
+          `[ZapSign][addendum:${addendumId}] sign_url ${
+            signUrl ? 'obtida' : 'não encontrada'
+          } no fluxo sent`,
+        );
         return res.status(200).json({ success: true, sign_url: signUrl });
       }
     }
