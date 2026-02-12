@@ -25,6 +25,7 @@ export interface Student {
     id: string;
     name: string;
     financialResponsibleId: string;
+    activeYears?: number[];
     // Adicione outros campos de Student se precisar
 }
 
@@ -74,12 +75,14 @@ export interface ContractAddendum {
     year: number;
     financialResponsibleId: string;
     reason: {
-        type: 'MODALITY_CHANGE' | 'FREQUENCY_CHANGE' | 'SIBLING_ADDED' | 'NEW_MODALITY_ADDED' | 'MODALITY_REMOVED' | 'OTHER';
+        type: 'MODALITY_CHANGE' | 'FREQUENCY_CHANGE' | 'SIBLING_ADDED' | 'SIBLING_REMOVED' | 'NEW_MODALITY_ADDED' | 'MODALITY_REMOVED' | 'OTHER';
         description: string;
     };
     snapshot: {
         before: Record<string, any>;
         after: Record<string, any>;
+        reasonTypes?: ContractAddendum['reason']['type'][];
+        otherReasonDescriptions?: string[];
         enrollmentFeeOriginal?: number;
         enrollmentFeeUpdated?: number;
         enrollmentFeeDifference?: number;
