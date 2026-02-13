@@ -22,6 +22,7 @@ admin.initializeApp({
 import userRoutes from './routes/userRoutes';
 import jobRoutes from './routes/jobRoutes';
 import contractRoutes from './routes/contractRoutes';
+import leadRoutes from './routes/leadRoutes';
 
 // --- 2. INICIALIZAÇÃO DO EXPRESS ---
 const app = express();
@@ -31,7 +32,11 @@ const app = express();
 // --- CONFIGURAÇÃO DE CORS DINÂMICA ---
 const allowedOrigins = [
     'http://localhost:5173', // Sua URL de desenvolvimento do frontend
+    'http://klminas.local:5173',
+    'http://app.klminas.local:5173',
     'https://app.klminasesportes.com.br', // <<< COLOQUE A URL DO SEU FRONTEND DEPOIS
+    'https://klminasesportes.com.br',
+    'https://www.klminasesportes.com.br',
     'https://klminas-1ecb0.web.app'
 ];
 
@@ -60,6 +65,7 @@ app.get('/api/health-check', (req, res) => {
 app.use('/api', userRoutes);
 app.use('/api/jobs', jobRoutes);
 app.use('/api/contracts', contractRoutes);
+app.use('/api', leadRoutes);
 
 // --- 4. INICIAR O SERVIDOR ---
 const PORT = process.env.PORT || 3001;
