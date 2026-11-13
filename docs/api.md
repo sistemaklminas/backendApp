@@ -71,6 +71,12 @@ Executa rotina de verificação de contratos pendentes/vencidos.
 Auth:
 - header `x-job-secret: <CRON_JOB_SECRET>`
 
+### `POST /process-waitlist-expirations`
+Expira ofertas da fila, move o aluno para o final da fila e registra auditoria.
+
+Auth:
+- header `x-job-secret: <CRON_JOB_SECRET>`
+
 ## 5. Autenticação e autorização
 
 ## 5.1 Auth
