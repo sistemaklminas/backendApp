@@ -3,6 +3,7 @@
 ## 1. Objetivo
 
 Expor serviços HTTP para operações sensíveis que não devem rodar no frontend:
+
 - criação/gestão de usuários com privilégios
 - integração com assinatura digital
 - jobs operacionais
@@ -11,29 +12,34 @@ Expor serviços HTTP para operações sensíveis que não devem rodar no fronten
 ## 2. Componentes
 
 ## 2.1 `server.ts`
+
 - inicializa Express
 - configura CORS
 - registra middlewares globais
 - conecta rotas
 
 ## 2.2 `routes/*`
+
 - mapeiam endpoints e middlewares:
   - `userRoutes.ts`
   - `contractRoutes.ts`
   - `jobRoutes.ts`
 
 ## 2.3 `middlewares/*`
+
 - `requireAuth`: valida Firebase token
 - `requireRole`: autorização por papel
 - `requireJobSecret`: protege endpoints de cron
 
 ## 2.4 `controllers/*`
+
 - `userController.ts`: criação/atualização/remoção de usuário, claims
 - `contractController.tsx`: contratos, aditivos, ZapSign, webhook, uploads
 - `jobController.ts`: rotinas automatizadas
 - `syncController.ts`: sincronizações entre entidades
 
 ## 2.5 `lib/*`
+
 - `firebaseAdmin.ts`: acesso admin ao Firebase
 - `firestoreApi.ts`: consultas agregadas
 - `pdf/*`: documentos em PDF (contrato/aditivo)
