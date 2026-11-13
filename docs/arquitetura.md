@@ -20,7 +20,7 @@ Expor serviços HTTP para operações sensíveis que não devem rodar no fronten
 
 ## 2.2 `routes/*`
 
-- mapeiam endpoints e middlewares:
+- Mapeiam endpoints e middlewares:
   - `userRoutes.ts`
   - `contractRoutes.ts`
   - `jobRoutes.ts`
