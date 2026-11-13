@@ -114,3 +114,82 @@ export const checkPendingContractsJob = async (req: Request, res: Response) => {
         return res.status(500).send({ error: 'Erro interno ao processar o job.' });
     }
 };
+
+export const processWaitlistExpirationsJob = async (_req: Request, res: Response) => {
+    const firestore = admin.firestore();
+    const now = admin.firestore.Timestamp.now();
+    try {
+        const constantsSnap = await firestore.collection('systemConstants').doc('main').get();
+        const constants = constantsSnap.exists
+            ? constantsSnap.data()
+            : (await firestore.collection('systemConstants').doc('single').get()).data();
+        const reservationDays = Number(constants?.waitlistReservationDays || 2);
+        const expired = await firestore.collection('subscriptions')
+            .where('isActive', '==', true)
+            .where('isWaiting', '==', true)
+            .where('waitlistOfferExpiresAt', '<=', now)
+            .get();
+        let processed = 0;
+        for (const expiredDoc of expired.docs) {
+            const sub = expiredDoc.data();
+            const queue = await firestore.collection('subscriptions')
+                .where('classId', '==', sub.classId)
+                .where('year', '==', sub.year)
+                .where('isActive', '==', true)
+                .where('isWaiting', '==', true)
+                .orderBy('subscriptionDate', 'desc')
+                .limit(1).get();
+            const last = queue.empty ? now : queue.docs[0].data().subscriptionDate;
+            const nextMillis = Math.max(now.toMillis(), last?.toMillis?.() + 1 || now.toMillis());
+            const nextDate = admin.firestore.Timestamp.fromMillis(nextMillis);
+            const batch = firestore.batch();
+            batch.update(expiredDoc.ref, {
+                subscriptionDate: nextDate,
+                waitlistOfferStartedAt: null,
+                waitlistOfferExpiresAt: null,
+                waitlistLastActionAt: now,
+                updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+                updatedBy: 'system_waitlist_job',
+            });
+            batch.set(firestore.collection('auditLogs').doc(), {
+                author: { id: 'system_waitlist_job', name: 'Processador automático da fila', role: 'system' },
+                action: 'WAITLIST_OFFER_EXPIRED',
+                target: { type: 'subscription', id: expiredDoc.id, name: String(sub.studentId) },
+                details: { classId: sub.classId, year: sub.year, reservationDays, movedToEndAt: nextDate },
+                createdAt: now,
+            });
+            await batch.commit();
+            processed++;
+        }
+        let offered = 0;
+        const classes = await firestore.collection('classes').where('isActive', '==', true).get();
+        for (const classDoc of classes.docs) {
+            const classData = classDoc.data();
+            const year = Number(classData.year || constants?.currentSchoolYear || new Date().getFullYear());
+            const enrolled = await firestore.collection('subscriptions')
+                .where('classId', '==', classDoc.id).where('year', '==', year)
+                .where('isActive', '==', true).where('isWaiting', '==', false)
+                .get();
+            const capacity = Number(classData.maxStudents || classData.vacancies || 0);
+            if (!capacity || enrolled.size >= capacity) continue;
+            const waiting = await firestore.collection('subscriptions')
+                .where('classId', '==', classDoc.id).where('year', '==', year)
+                .where('isActive', '==', true).where('isWaiting', '==', true)
+                .orderBy('subscriptionDate', 'asc').limit(1).get();
+            if (waiting.empty) continue;
+            const waitingDoc = waiting.docs[0];
+            const waitingData = waitingDoc.data();
+            if (waitingData.waitlistOfferExpiresAt?.toMillis?.() > now.toMillis()) continue;
+            const expiresAt = admin.firestore.Timestamp.fromMillis(now.toMillis() + reservationDays * 24 * 60 * 60 * 1000);
+            const batch = firestore.batch();
+            batch.update(waitingDoc.ref, { waitlistOfferStartedAt: now, waitlistOfferExpiresAt: expiresAt, waitlistLastActionAt: now, updatedAt: admin.firestore.FieldValue.serverTimestamp(), updatedBy: 'system_waitlist_job' });
+            batch.set(firestore.collection('auditLogs').doc(), { author: { id: 'system_waitlist_job', name: 'Processador automático da fila', role: 'system' }, action: 'WAITLIST_OFFER_CREATED', target: { type: 'subscription', id: waitingDoc.id, name: String(waitingData.studentId) }, details: { classId: classDoc.id, year, expiresAt, reservationDays }, createdAt: now });
+            await batch.commit();
+            offered++;
+        }
+        return res.status(200).json({ processed, offered, processedAt: now.toDate().toISOString() });
+    } catch (error) {
+        console.error('Erro ao processar expirações da fila:', error);
+        return res.status(500).json({ error: 'Erro interno ao processar a fila.' });
+    }
+};
