@@ -17,3 +17,7 @@ yarn-error.log*
 # Mesmo que já esteja no .gitignore da raiz, é uma boa prática
 # ter aqui também como uma camada extra de segurança.
 firebase-service-account.json
+firebase-service-account.json.json
+firebase-service-account.jsonOLD.json
+firebase-service-account*.json
+*.json:Zone.Identifier
