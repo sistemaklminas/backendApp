@@ -55,6 +55,25 @@ export const requireAuth = async (req: Request, res: Response, next: NextFunctio
     }
 };
 
+/** Permite apenas sessões anônimas do fluxo público, sem exigir userProfile. */
+export const requireAnonymousAuth = async (req: Request, res: Response, next: NextFunction) => {
+    const { authorization } = req.headers;
+    if (!authorization?.startsWith('Bearer ')) {
+        return res.status(401).send({ error: 'Sessão pública não identificada.' });
+    }
+    try {
+        const decodedToken = await admin.auth().verifyIdToken(authorization.slice('Bearer '.length));
+        if (decodedToken.firebase?.sign_in_provider !== 'anonymous') {
+            return res.status(403).send({ error: 'Esta rota aceita apenas sessões públicas.' });
+        }
+        req.user = { ...decodedToken };
+        return next();
+    } catch (error) {
+        console.error('Erro ao verificar sessão pública:', error);
+        return res.status(403).send({ error: 'Sessão pública inválida ou expirada.' });
+    }
+};
+
 // Um segundo middleware, mais específico, para verificar a 'role' (função) do usuário
 // Ele deve ser usado DEPOIS do 'requireAuth'
 export const requireRole = (roles: string[]) => {

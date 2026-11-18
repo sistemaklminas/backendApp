@@ -23,6 +23,7 @@ import userRoutes from './routes/userRoutes';
 import jobRoutes from './routes/jobRoutes';
 import contractRoutes from './routes/contractRoutes';
 import leadRoutes from './routes/leadRoutes';
+import publicEnrollmentRoutes from './routes/publicEnrollmentRoutes';
 
 // --- 2. INICIALIZAÇÃO DO EXPRESS ---
 const app = express();
@@ -66,6 +67,7 @@ app.use('/api', userRoutes);
 app.use('/api/jobs', jobRoutes);
 app.use('/api/contracts', contractRoutes);
 app.use('/api', leadRoutes);
+app.use('/api', publicEnrollmentRoutes);
 
 // --- 4. INICIAR O SERVIDOR ---
 const PORT = process.env.PORT || 3001;

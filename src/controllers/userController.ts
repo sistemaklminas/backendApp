@@ -728,13 +728,16 @@ export const getContractFile = async (req: Request, res: Response) => {
         const userProfileDoc = await userProfileRef.get();
         const userRole = userProfileDoc.data()?.role;
 
-        // Permite o acesso se:
-        // 1. O usuário for admin/root.
-        // 2. O UID do usuário que fez a requisição for o mesmo do pai/responsável do aluno.
+        // Contratos e valores são dados financeiros: pais que não são
+        // responsáveis financeiros não podem acessá-los.
+        const responsibleDoc = studentData.financialResponsibleId
+            ? await admin.firestore().collection('financialResponsibles').doc(studentData.financialResponsibleId).get()
+            : null;
+        const responsibleData = responsibleDoc?.exists ? responsibleDoc.data() : null;
         const isAuthorized =
             ['root', 'admin', 'editor'].includes(userRole) ||
-            requestingUser.uid === studentData.parentOneId ||
-            requestingUser.uid === studentData.parentTwoId ||
+            responsibleData?.authUid === requestingUser.uid ||
+            // Compatibilidade com dados legados que usavam o UID como ID.
             requestingUser.uid === studentData.financialResponsibleId;
 
         if (!isAuthorized) {
